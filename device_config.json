@@ -1,0 +1,5 @@
+{
+  "moonraker_addr": "http://192.168.51.168:7125",
+  "results_dir": "./experiment_results",
+  "chi_path": "C:/CHI760E/chi760e/chi760e.exe"
+}

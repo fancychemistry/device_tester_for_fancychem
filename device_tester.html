@@ -1,0 +1,2607 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>设备测试器</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 20px;
+            padding-bottom: 20px;
+        }
+        .device-card {
+            margin-bottom: 20px;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+        .status-offline {
+            background-color: #dc3545;
+        }
+        .status-initialized {
+            background-color: #198754;
+        }
+        .log-container {
+            height: 200px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+        }
+        .log-error {
+            color: #dc3545;
+        }
+        .log-success {
+            color: #198754;
+        }
+        .tab-content {
+            padding: 15px;
+            border-left: 1px solid #dee2e6;
+            border-right: 1px solid #dee2e6;
+            border-bottom: 1px solid #dee2e6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">设备测试器</h1>
+        
+        <!-- 配置面板 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">系统配置</h5>
+            </div>
+            <div class="card-body">
+                <form id="configForm">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="moonrakerAddr" class="form-label">Moonraker 地址</label>
+                                <input type="text" class="form-control" id="moonrakerAddr" placeholder="http://192.168.51.168:7125">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="resultsDir" class="form-label">结果保存目录</label>
+                                <input type="text" class="form-control" id="resultsDir" placeholder="./experiment_results">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="chiPath" class="form-label">CHI 程序路径</label>
+                                <input type="text" class="form-control" id="chiPath" placeholder="C:\CHI760E\chi760e\chi760e.exe">
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-primary" id="saveConfig">保存配置</button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- 设备状态概览 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">设备状态</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <span class="status-indicator" id="printerStatus"></span>
+                            <span>打印机</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <span class="status-indicator" id="pumpStatus"></span>
+                            <span>泵</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <span class="status-indicator" id="relayStatus"></span>
+                            <span>继电器</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <span class="status-indicator" id="chiStatus"></span>
+                            <span>CHI工作站</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 设备测试选项卡 -->
+        <ul class="nav nav-tabs" id="deviceTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="printer-tab" data-bs-toggle="tab" data-bs-target="#printer" type="button" role="tab">打印机</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="pump-tab" data-bs-toggle="tab" data-bs-target="#pump" type="button" role="tab">泵</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="relay-tab" data-bs-toggle="tab" data-bs-target="#relay" type="button" role="tab">继电器</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="chi-tab" data-bs-toggle="tab" data-bs-target="#chi" type="button" role="tab">CHI工作站</button>
+            </li>
+        </ul>
+        
+        <div class="tab-content" id="deviceTabsContent">
+            <!-- 打印机测试面板 -->
+            <div class="tab-pane fade show active" id="printer" role="tabpanel" aria-labelledby="printer-tab">
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <button type="button" class="btn btn-primary" id="initializePrinter">初始化打印机</button>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">坐标移动</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="printerMoveForm">
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="printerX" class="form-label">X 坐标</label>
+                                                <input type="number" class="form-control" id="printerX" placeholder="0" step="1">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="printerY" class="form-label">Y 坐标</label>
+                                                <input type="number" class="form-control" id="printerY" placeholder="0" step="1">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="printerZ" class="form-label">Z 坐标</label>
+                                                <input type="number" class="form-control" id="printerZ" placeholder="0" step="1">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-primary" id="movePrinter">移动</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">网格位置</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="printerGridForm">
+                                    <div class="mb-3">
+                                        <label for="gridPosition" class="form-label">网格位置 (1-50)</label>
+                                        <select class="form-select" id="gridPosition">
+                                            <option selected disabled>选择网格位置</option>
+                                        </select>
+                                    </div>
+                                    <button type="button" class="btn btn-primary" id="moveToGrid">移动到网格</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">其他操作</h5>
+                            </div>
+                            <div class="card-body">
+                                <button type="button" class="btn btn-primary me-2" id="homePrinter">归位</button>
+                                <button type="button" class="btn btn-secondary" id="getPrinterPosition">获取当前位置</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 泵测试面板 -->
+            <div class="tab-pane fade" id="pump" role="tabpanel" aria-labelledby="pump-tab">
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <button type="button" class="btn btn-primary" id="initializePump">初始化泵</button>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">泵送液体</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="pumpDispenseForm">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="pumpIndex" class="form-label">泵编号</label>
+                                                <select class="form-select" id="pumpIndex">
+                                                    <option value="0">泵 0</option>
+                                                    <option value="1">泵 1</option>
+                                                    <option value="2">泵 2</option>
+                                                    <option value="3">泵 3</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="pumpVolume" class="form-label">体积 (μL)</label>
+                                                <input type="number" class="form-control" id="pumpVolume" placeholder="100" step="10" min="10">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="pumpSpeed" class="form-label">速度</label>
+                                                <select class="form-select" id="pumpSpeed">
+                                                    <option value="slow">慢</option>
+                                                    <option value="medium" selected>中</option>
+                                                    <option value="fast">快</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="pumpDirection" class="form-label">方向</label>
+                                                <select class="form-select" id="pumpDirection">
+                                                    <option value="1" selected>正向/吸出</option>
+                                                    <option value="-1">反向/吸入</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-primary" id="dispenseAuto">自动泵送</button>
+                                    <button type="button" class="btn btn-secondary" id="dispenseTimed">定时泵送</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">定时参数</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="pumpTimedForm">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="pumpDuration" class="form-label">持续时间 (秒)</label>
+                                                <input type="number" class="form-control" id="pumpDuration" placeholder="5" step="1" min="1">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="pumpRpm" class="form-label">转速 RPM</label>
+                                                <input type="number" class="form-control" id="pumpRpm" placeholder="30" step="1" min="1" max="100">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </form>
+                                
+                                <!-- 泵进度条 -->
+                                    <div class="progress" id="pumpProgressContainer" style="display: none;">
+                                        <div class="progress-bar" id="pumpProgress" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                                    </div>
+                                <!-- 泵送时间信息 -->
+                                <div class="mt-1 text-center" id="pumpTimeInfo" style="display: none;">
+                                    <small><span id="pumpElapsedTime">0.0</span>s / <span id="pumpTotalDuration">0.0</span>s</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">其他操作</h5>
+                            </div>
+                            <div class="card-body">
+                                <button type="button" class="btn btn-danger me-2" id="stopPump">停止泵</button>
+                                <button type="button" class="btn btn-secondary me-2" id="getPumpStatus">获取泵状态</button>
+                                <button type="button" class="btn btn-info" id="testPumpWebSocket">测试WebSocket</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 继电器测试面板 -->
+            <div class="tab-pane fade" id="relay" role="tabpanel" aria-labelledby="relay-tab">
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <button type="button" class="btn btn-primary" id="initializeRelay">初始化继电器</button>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">继电器控制</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-3 mb-3">
+                                        <div class="card">
+                                            <div class="card-body text-center">
+                                                <h5 class="card-title">继电器 1</h5>
+                                                <p class="card-text"><span class="badge bg-secondary" id="relay1Status">未知</span></p>
+                                                <button type="button" class="btn btn-primary toggle-relay" data-relay="1">切换状态</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <div class="card">
+                                            <div class="card-body text-center">
+                                                <h5 class="card-title">继电器 2</h5>
+                                                <p class="card-text"><span class="badge bg-secondary" id="relay2Status">未知</span></p>
+                                                <button type="button" class="btn btn-primary toggle-relay" data-relay="2">切换状态</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <div class="card">
+                                            <div class="card-body text-center">
+                                                <h5 class="card-title">继电器 3</h5>
+                                                <p class="card-text"><span class="badge bg-secondary" id="relay3Status">未知</span></p>
+                                                <button type="button" class="btn btn-primary toggle-relay" data-relay="3">切换状态</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <div class="card">
+                                            <div class="card-body text-center">
+                                                <h5 class="card-title">继电器 4</h5>
+                                                <p class="card-text"><span class="badge bg-secondary" id="relay4Status">未知</span></p>
+                                                <button type="button" class="btn btn-primary toggle-relay" data-relay="4">切换状态</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <button type="button" class="btn btn-secondary" id="getRelayStatus">刷新继电器状态</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- CHI测试面板 -->
+            <div class="tab-pane fade" id="chi" role="tabpanel" aria-labelledby="chi-tab">
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <button type="button" class="btn btn-primary" id="initializeChi">初始化CHI工作站</button>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5 class="mb-0">循环伏安法 (CV)</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="cvForm">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="cvEi" class="form-label">初始电位 (V)</label>
+                                                <input type="number" class="form-control" id="cvEi" placeholder="0" step="0.1" value="0">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="cvHv" class="form-label">高电压 (V)</label>
+                                                <input type="number" class="form-control" id="cvHv" placeholder="0.5" step="0.1" value="0.5">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="cvLv" class="form-label">低电压 (V)</label>
+                                                <input type="number" class="form-control" id="cvLv" placeholder="-0.5" step="0.1" value="-0.5">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="cvSr" class="form-label">扫描速率 (V/s)</label>
+                                                <input type="number" class="form-control" id="cvSr" placeholder="0.1" step="0.05" value="0.1">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="cvCycles" class="form-label">循环次数</label>
+                                                <input type="number" class="form-control" id="cvCycles" placeholder="3" step="1" min="1" value="3">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="cvSi" class="form-label">采样间隔 (V)</label>
+                                                <input type="number" class="form-control" id="cvSi" placeholder="0.001" step="0.001" value="0.001">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="cvPn" class="form-label">初始扫描方向</label>
+                                                <select class="form-select" id="cvPn">
+                                                    <option value="p" selected>正向 (p)</option>
+                                                    <option value="n">负向 (n)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="cvSens" class="form-label">灵敏度 (A/V)</label>
+                                                <input type="text" class="form-control" id="cvSens" placeholder="1e-5" value="1e-5">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <div class="form-check mt-4">
+                                                    <input class="form-check-input" type="checkbox" value="" id="cvAutosens">
+                                                    <label class="form-check-label" for="cvAutosens">
+                                                        使用自动灵敏度
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-primary" id="runCvTest">运行CV测试</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5 class="mb-0">计时电流法 (CA)</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="caForm">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="caVoltage" class="form-label">初始电位 (V)</label>
+                                                <input type="number" class="form-control" id="caVoltage" placeholder="-0.3" step="0.1" value="-0.3">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="caTime" class="form-label">测试时间 (秒)</label>
+                                                <input type="number" class="form-control" id="caTime" placeholder="10" step="5" min="1" value="10">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="caHv" class="form-label">高电位 (V)</label>
+                                                <input type="number" class="form-control" id="caHv" placeholder="0.2" step="0.1" value="0.2">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="caLv" class="form-label">低电位 (V)</label>
+                                                <input type="number" class="form-control" id="caLv" placeholder="-0.8" step="0.1" value="-0.8">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="caInterval" class="form-label">采样间隔 (秒)</label>
+                                                <input type="number" class="form-control" id="caInterval" placeholder="0.1" step="0.1" min="0.01" value="0.1">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="caPw" class="form-label">脉冲宽度 (秒)</label>
+                                                <input type="number" class="form-control" id="caPw" placeholder="0.5" step="0.1" min="0.01" value="0.5">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="caPn" class="form-label">初始极性</label>
+                                                <select class="form-select" id="caPn">
+                                                    <option value="p" selected>正向 (p)</option>
+                                                    <option value="n">负向 (n)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="caRange" class="form-label">灵敏度 (A)</label>
+                                                <input type="text" class="form-control" id="caRange" placeholder="1e-4" value="1e-4">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <div class="form-check mt-4">
+                                                    <input class="form-check-input" type="checkbox" value="" id="caAutosens">
+                                                    <label class="form-check-label" for="caAutosens">
+                                                        使用自动灵敏度
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-primary" id="runCaTest">运行CA测试</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-0">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5 class="mb-0">电化学阻抗谱 (EIS)</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="eisForm">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="eisFreqInit" class="form-label">初始频率 (Hz)</label>
+                                                <input type="number" class="form-control" id="eisFreqInit" placeholder="100000" step="1000" value="100000">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="eisFreqFinal" class="form-label">最终频率 (Hz)</label>
+                                                <input type="number" class="form-control" id="eisFreqFinal" placeholder="0.1" step="0.1" value="0.1">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="eisAmplitude" class="form-label">信号幅度 (mV)</label>
+                                                <input type="number" class="form-control" id="eisAmplitude" placeholder="10" step="1" min="1" value="10">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="eisVoltage" class="form-label">直流电压 (V)</label>
+                                                <input type="number" class="form-control" id="eisVoltage" placeholder="0" step="0.1" value="0">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-primary" id="runEisTest">运行EIS测试</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5 class="mb-0">线性扫描伏安法 (LSV)</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="lsvForm">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="lsvInitialV" class="form-label">初始电压 (V)</label>
+                                                <input type="number" class="form-control" id="lsvInitialV" placeholder="-0.5" step="0.1" value="-0.5">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="lsvFinalV" class="form-label">最终电压 (V)</label>
+                                                <input type="number" class="form-control" id="lsvFinalV" placeholder="0.5" step="0.1" value="0.5">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="lsvScanRate" class="form-label">扫描速率 (V/s)</label>
+                                                <input type="number" class="form-control" id="lsvScanRate" placeholder="0.1" step="0.01" value="0.1">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="lsvSens" class="form-label">灵敏度 (A/V)</label>
+                                                <input type="text" class="form-control" id="lsvSens" placeholder="1e-5" value="1e-5">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-primary" id="runLsvTest">运行LSV测试</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-0">
+                     <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5 class="mb-0">计时技术 (IT)</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="itForm">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="itVoltage" class="form-label">电压 (V)</label>
+                                                <input type="number" class="form-control" id="itVoltage" placeholder="-0.3" step="0.1" value="-0.3">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="itDuration" class="form-label">持续时间 (s)</label>
+                                                <input type="number" class="form-control" id="itDuration" placeholder="60" step="1" value="60">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="itInterval" class="form-label">采样间隔 (s)</label>
+                                                <input type="number" class="form-control" id="itInterval" placeholder="0.1" step="0.01" value="0.1">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="itSens" class="form-label">灵敏度 (A/V)</label>
+                                                <input type="text" class="form-control" id="itSens" placeholder="1e-5" value="1e-5">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-primary" id="runItTest">运行IT测试</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                         <div class="card mb-3">
+                            <div class="card-header">
+                                <h5 class="mb-0">开路电位 (OCP)</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="ocpForm">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="ocpSt" class="form-label">运行时间 (s)</label>
+                                                <input type="number" class="form-control" id="ocpSt" placeholder="60" step="1" value="60">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="ocpSi" class="form-label">采样间隔 (s)</label>
+                                                <input type="number" class="form-control" id="ocpSi" placeholder="0.1" step="0.01" value="0.1">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="ocpEh" class="form-label">高电位限制 (V)</label>
+                                                <input type="number" class="form-control" id="ocpEh" placeholder="10.0 (可选)" step="0.1">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="ocpEl" class="form-label">低电位限制 (V)</label>
+                                                <input type="number" class="form-control" id="ocpEl" placeholder="-10.0 (可选)" step="0.1">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-12">
+                                            <div class="mb-3">
+                                                <label for="ocpFileName" class="form-label">文件名 (可选)</label>
+                                                <input type="text" class="form-control" id="ocpFileName" placeholder="OCP_Test">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-primary" id="runOcpTest">运行OCP测试</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-0">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5 class="mb-0">差分脉冲伏安法 (DPV)</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="dpvForm">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="dpvEi" class="form-label">初始电位 (V)</label>
+                                                <input type="number" class="form-control" id="dpvEi" placeholder="-0.5" step="0.1" value="-0.5">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="dpvEf" class="form-label">最终电位 (V)</label>
+                                                <input type="number" class="form-control" id="dpvEf" placeholder="0.5" step="0.1" value="0.5">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="dpvIncre" class="form-label">电位增量 (V)</label>
+                                                <input type="number" class="form-control" id="dpvIncre" placeholder="0.004" step="0.001" value="0.004">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="dpvAmp" class="form-label">脉冲幅度 (V)</label>
+                                                <input type="number" class="form-control" id="dpvAmp" placeholder="0.05" step="0.01" value="0.05">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="dpvPw" class="form-label">脉冲宽度 (s)</label>
+                                                <input type="number" class="form-control" id="dpvPw" placeholder="0.05" step="0.01" value="0.05">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="dpvSw" class="form-label">采样宽度 (s)</label>
+                                                <input type="number" class="form-control" id="dpvSw" placeholder="0.001" step="0.001" value="0.001">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="dpvProd" class="form-label">脉冲周期 (s)</label>
+                                                <input type="number" class="form-control" id="dpvProd" placeholder="0.2" step="0.1" value="0.2">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="dpvSens" class="form-label">灵敏度 (A/V)</label>
+                                                <input type="text" class="form-control" id="dpvSens" placeholder="1e-5" value="1e-5">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <div class="form-check mt-4">
+                                                    <input class="form-check-input" type="checkbox" value="" id="dpvAutosens">
+                                                    <label class="form-check-label" for="dpvAutosens">
+                                                        使用自动灵敏度
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-12">
+                                            <div class="mb-3">
+                                                <label for="dpvFileName" class="form-label">文件名 (可选)</label>
+                                                <input type="text" class="form-control" id="dpvFileName" placeholder="DPV_Test">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-primary" id="runDpvTest">运行DPV测试</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5 class="mb-0">阶梯伏安法 (SCV)</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="scvForm">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="scvEi" class="form-label">初始电位 (V)</label>
+                                                <input type="number" class="form-control" id="scvEi" placeholder="-0.5" step="0.1" value="-0.5">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="scvEf" class="form-label">最终电位 (V)</label>
+                                                <input type="number" class="form-control" id="scvEf" placeholder="0.5" step="0.1" value="0.5">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="scvIncre" class="form-label">电位增量 (V)</label>
+                                                <input type="number" class="form-control" id="scvIncre" placeholder="0.004" step="0.001" value="0.004">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="scvSw" class="form-label">采样宽度 (s)</label>
+                                                <input type="number" class="form-control" id="scvSw" placeholder="0.001" step="0.001" value="0.001">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="scvProd" class="form-label">阶跃周期 (s)</label>
+                                                <input type="number" class="form-control" id="scvProd" placeholder="0.2" step="0.1" value="0.2">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="scvSens" class="form-label">灵敏度 (A/V)</label>
+                                                <input type="text" class="form-control" id="scvSens" placeholder="1e-5" value="1e-5">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <div class="form-check mt-4">
+                                                    <input class="form-check-input" type="checkbox" value="" id="scvAutosens">
+                                                    <label class="form-check-label" for="scvAutosens">
+                                                        使用自动灵敏度
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-12">
+                                            <div class="mb-3">
+                                                <label for="scvFileName" class="form-label">文件名 (可选)</label>
+                                                <input type="text" class="form-control" id="scvFileName" placeholder="SCV_Test">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-primary" id="runScvTest">运行SCV测试</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-0">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5 class="mb-0">计时电位法 (CP)</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="cpForm">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="cpIc" class="form-label">阴极电流 (A)</label>
+                                                <input type="number" class="form-control" id="cpIc" placeholder="0.001" step="0.001" value="0.001">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="cpIa" class="form-label">阳极电流 (A)</label>
+                                                <input type="number" class="form-control" id="cpIa" placeholder="0.001" step="0.001" value="0.001">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="cpTc" class="form-label">阴极时间 (s)</label>
+                                                <input type="number" class="form-control" id="cpTc" placeholder="10.0" step="0.1" value="10.0">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="cpTa" class="form-label">阳极时间 (s)</label>
+                                                <input type="number" class="form-control" id="cpTa" placeholder="10.0" step="0.1" value="10.0">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="cpEh" class="form-label">高电位限制 (V)</label>
+                                                <input type="number" class="form-control" id="cpEh" placeholder="10.0" step="0.1" value="10.0">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="cpEl" class="form-label">低电位限制 (V)</label>
+                                                <input type="number" class="form-control" id="cpEl" placeholder="-10.0" step="0.1" value="-10.0">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="cpPn" class="form-label">第一步极性</label>
+                                                <select class="form-select" id="cpPn">
+                                                    <option value="p" selected>阳极 (p)</option>
+                                                    <option value="n">阴极 (n)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="cpSi" class="form-label">采样间隔 (s)</label>
+                                                <input type="number" class="form-control" id="cpSi" placeholder="0.1" step="0.01" value="0.1">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="cpCl" class="form-label">循环次数</label>
+                                                <input type="number" class="form-control" id="cpCl" placeholder="1" step="1" value="1">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="cpPriority" class="form-label">优先模式</label>
+                                                <select class="form-select" id="cpPriority">
+                                                    <option value="time" selected>时间优先</option>
+                                                    <option value="potential">电位优先</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="cpFileName" class="form-label">文件名 (可选)</label>
+                                                <input type="text" class="form-control" id="cpFileName" placeholder="CP_Test">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-primary" id="runCpTest">运行CP测试</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-0">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5 class="mb-0">交流伏安法 (ACV)</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="acvForm">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="acvEi" class="form-label">初始电位 (V)</label>
+                                                <input type="number" class="form-control" id="acvEi" placeholder="-0.5" step="0.1" value="-0.5">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="acvEf" class="form-label">最终电位 (V)</label>
+                                                <input type="number" class="form-control" id="acvEf" placeholder="0.5" step="0.1" value="0.5">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="acvIncre" class="form-label">电位增量 (V)</label>
+                                                <input type="number" class="form-control" id="acvIncre" placeholder="0.01" step="0.01" value="0.01">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="acvAmp" class="form-label">交流振幅 (mV)</label>
+                                                <input type="number" class="form-control" id="acvAmp" placeholder="25" step="1" value="25">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="acvFreq" class="form-label">交流频率 (Hz)</label>
+                                                <input type="number" class="form-control" id="acvFreq" placeholder="25" step="1" value="25">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="acvQuiet" class="form-label">静息时间 (s)</label>
+                                                <input type="number" class="form-control" id="acvQuiet" placeholder="2.0" step="0.1" value="2.0">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="acvSens" class="form-label">灵敏度 (A)</label>
+                                                <input type="number" class="form-control" id="acvSens" placeholder="1e-5" step="1e-6" value="1e-5">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="acvFileName" class="form-label">文件名 (可选)</label>
+                                                <input type="text" class="form-control" id="acvFileName" placeholder="ACV_Test">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-primary" id="runAcvTest">运行ACV测试</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-0">
+                    <div class="col-md-6">
+                         <div class="card mb-3">
+                            <div class="card-header">
+                                <h5 class="mb-0">测试状态</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <strong>当前测试类型:</strong> <span id="chiTestType">无</span>
+                                </div>
+                                <div class="mb-3">
+                                    <strong>测试状态:</strong> <span id="chiTestStatus">空闲</span>
+                                </div>
+                                <div class="mb-3">
+                                    <strong>已用时间:</strong> <span id="chiElapsedTime">0s</span>
+                                </div>
+                                <div class="mb-3">
+                                    <div class="progress" id="chiProgressContainer" style="display: none;">
+                                        <div class="progress-bar" id="chiProgress" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-danger" id="stopChiTest">停止测试</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                         <div class="card mb-3">
+                            <div class="card-header">
+                                <h5 class="mb-0">操作</h5>
+                            </div>
+                            <div class="card-body">
+                                <button type="button" class="btn btn-secondary mt-2" id="getChiResults">刷新结果列表</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">测试结果文件</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="list-group" id="chiResultsList">
+                                    <div class="list-group-item">请点击刷新按钮获取结果</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 日志面板 -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">操作日志</h5>
+            </div>
+            <div class="card-body">
+                <div class="log-container" id="logContainer">
+                    <!-- 日志内容会动态添加 -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 公共变量
+        const apiBaseUrl = '';
+        let wsConnection = null;
+        
+        // 初始化函数
+        async function initialize() {
+            // 加载配置
+            await loadConfig();
+            
+            // 更新设备状态
+            await updateDeviceStatus();
+            
+            // 填充网格位置选择框
+            populateGridPositions();
+            
+            // 连接WebSocket
+            connectWebSocket();
+            
+            // 绑定按钮事件
+            bindEvents();
+        }
+        
+        // 加载配置
+        async function loadConfig() {
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/config`);
+                const data = await response.json();
+                
+                document.getElementById('moonrakerAddr').value = data.moonraker_addr || '';
+                document.getElementById('resultsDir').value = data.results_dir || '';
+                document.getElementById('chiPath').value = data.chi_path || '';
+                
+                log("系统配置已加载", "info");
+            } catch (error) {
+                log(`加载配置失败: ${error.message}`, "error");
+            }
+        }
+        
+        // 保存配置
+        async function saveConfig() {
+            const config = {
+                moonraker_addr: document.getElementById('moonrakerAddr').value,
+                results_dir: document.getElementById('resultsDir').value,
+                chi_path: document.getElementById('chiPath').value
+            };
+            
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/config`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(config)
+                });
+                
+                const data = await response.json();
+                log(data.message, "success");
+            } catch (error) {
+                log(`保存配置失败: ${error.message}`, "error");
+            }
+        }
+        
+        // 更新设备状态
+        async function updateDeviceStatus() {
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/status`);
+                const data = await response.json();
+                
+                updateStatusIndicator('printerStatus', data.printer.initialized);
+                updateStatusIndicator('pumpStatus', data.pump.initialized);
+                updateStatusIndicator('relayStatus', data.relay.initialized);
+                updateStatusIndicator('chiStatus', data.chi.initialized);
+                
+            } catch (error) {
+                log(`获取设备状态失败: ${error.message}`, "error");
+            }
+        }
+        
+        // 更新状态指示器
+        function updateStatusIndicator(elementId, isInitialized) {
+            const element = document.getElementById(elementId);
+            if (isInitialized) {
+                element.classList.remove('status-offline');
+                element.classList.add('status-initialized');
+            } else {
+                element.classList.remove('status-initialized');
+                element.classList.add('status-offline');
+            }
+        }
+        
+        // 填充网格位置选择框
+        function populateGridPositions() {
+            const select = document.getElementById('gridPosition');
+            
+            // 清空现有选项
+            select.innerHTML = '<option selected disabled>选择网格位置</option>';
+            
+            // 添加1-50的选项
+            for (let i = 1; i <= 50; i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = `位置 ${i}`;
+                select.appendChild(option);
+            }
+        }
+        
+        // 连接WebSocket
+        function connectWebSocket() {
+            const wsUrl = `ws://${window.location.host}/ws`;
+            
+            wsConnection = new WebSocket(wsUrl);
+            
+            wsConnection.onopen = function() {
+                log("WebSocket 连接已建立", "success");
+            };
+            
+            wsConnection.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            };
+            
+            wsConnection.onclose = function() {
+                log("WebSocket 连接已关闭，将在3秒后尝试重连", "error");
+                setTimeout(connectWebSocket, 3000);
+            };
+            
+            wsConnection.onerror = function(error) {
+                log(`WebSocket 错误: ${error.message}`, "error");
+            };
+        }
+        
+        // 处理WebSocket消息
+        function handleWebSocketMessage(data) {
+            console.log("Received WebSocket message:", data);
+            
+            // 处理泵状态更新
+            if (data.type === 'pump_status') {
+                const pumpProgressContainer = document.getElementById('pumpProgressContainer');
+                const pumpProgress = document.getElementById('pumpProgress');
+                const pumpTimeInfo = document.getElementById('pumpTimeInfo');
+                const pumpElapsedTime = document.getElementById('pumpElapsedTime');
+                const pumpTotalDuration = document.getElementById('pumpTotalDuration');
+                
+                // 更新泵状态指示器
+                updateStatusIndicator('pumpStatus', data.initialized);
+                
+                // 只有在running状态或progress > 0时才显示进度条
+                if (data.status.running || data.status.progress > 0) {
+                    // 显示进度条和时间信息
+                    pumpProgressContainer.style.display = 'flex';
+                    pumpTimeInfo.style.display = 'block';
+                    
+                    // 更新进度百分比
+                    const progressPercent = Math.min(Math.max(data.status.progress * 100, 0), 100).toFixed(0);
+                    pumpProgress.style.width = `${progressPercent}%`;
+                    pumpProgress.textContent = `${progressPercent}%`;
+                    pumpProgress.setAttribute('aria-valuenow', progressPercent);
+                    
+                    // 更新时间信息
+                    const elapsedTime = parseFloat(data.status.elapsed_time_seconds || 0).toFixed(1);
+                    pumpElapsedTime.textContent = elapsedTime;
+                    
+                    // 如果有总时长则显示，否则显示问号
+                    if (data.status.total_duration_seconds > 0) {
+                        const totalDuration = parseFloat(data.status.total_duration_seconds || 0).toFixed(1);
+                        pumpTotalDuration.textContent = totalDuration;
+                    } else {
+                        pumpTotalDuration.textContent = '?';
+                    }
+                    
+                    log(`泵状态: ${data.status.running ? '运行中' : '已停止'}, 进度: ${progressPercent}%, 时间: ${elapsedTime}s/${pumpTotalDuration.textContent}s`, "info");
+                } else {
+                    // 如果泵不在运行状态，且进度为0，隐藏进度条和时间信息
+                    if (data.status.progress == 0) {
+                        pumpProgressContainer.style.display = 'none';
+                        pumpTimeInfo.style.display = 'none';
+                    }
+                }
+                
+                return; // 处理完泵状态后返回，避免进入其他消息类型的处理
+            }
+
+            if (data.type === 'relay_status') {
+                log("Handling relay_status message: " + JSON.stringify(data), "info"); // 新增日志
+                updateStatusIndicator('relayStatus', data.initialized);
+                if (data.states) {
+                    for (const relayIdKey in data.states) { // relayIdKey will be "1", "2", etc.
+                        const statusElement = document.getElementById(`relay${relayIdKey}Status`);
+                        if (statusElement) {
+                            const stateValue = data.states[relayIdKey]; // "on" or "off"
+                            statusElement.textContent = stateValue === 'on' ? '开启' : '关闭';
+                            statusElement.className = `badge ${stateValue === 'on' ? 'bg-success' : 'bg-secondary'}`; // 使用 bg-secondary 代表关闭
+                            log(`Updated relay ${relayIdKey} to ${stateValue}`, "info");
+                        } else {
+                            log(`Element relay${relayIdKey}Status not found`, "error");
+                        }
+                    }
+                } else {
+                    log("relay_status message received, but no 'states' field found.", "warn");
+                }
+                return; // 处理完继电器状态后返回
+            }
+
+            // 处理其他类型的消息
+            if (data.type === 'ping') {
+                // 心跳消息，不需要处理
+                return;
+            } else if (data.type === 'printer_status') {
+                log("Handling printer_status message: " + JSON.stringify(data), "info");
+                updateStatusIndicator('printerStatus', data.initialized);
+                if (data.position) {
+                    // 可选：更新打印机位置显示，如果HTML中有相应元素
+                    // const posElement = document.getElementById('printerCurrentPosition');
+                    // if(posElement) posElement.textContent = `X: ${data.position.x}, Y: ${data.position.y}, Z: ${data.position.z}`;
+                }
+                return;
+            } else if (data.type === 'chi_status') {
+                log("Handling chi_status message: " + JSON.stringify(data), "info");
+                updateStatusIndicator('chiStatus', data.initialized);
+                const chiTestStatusElement = document.getElementById('chiTestStatus');
+                const chiTestProgressElement = document.getElementById('chiTestProgress');
+                const chiTestProgressContainer = document.getElementById('chiTestProgressContainer'); // 获取容器
+                const chiResultFileElement = document.getElementById('chiResultFile');
+
+                if (data.status) {
+                    let statusText = data.status.status || '未知';
+                    if (data.status.test_type) {
+                        statusText += `, 类型: ${data.status.test_type}`;
+                    }
+                    if (data.status.file_name) {
+                         statusText += `, 文件: ${data.status.file_name}`;
+                    }
+                    chiTestStatusElement.textContent = `测试状态: ${statusText}`;
+                    
+                    if (data.status.running || data.status.status === 'running' || data.status.status === 'initializing') {
+                        const progress = (data.status.progress || 0) * 100;
+                        chiTestProgressElement.style.width = `${progress.toFixed(0)}%`;
+                        chiTestProgressElement.textContent = `${progress.toFixed(0)}%`;
+                        chiTestProgressElement.setAttribute('aria-valuenow', progress.toFixed(0));
+                        if (chiTestProgressContainer) chiTestProgressContainer.style.display = 'flex'; // 显示进度条
+                    } else {
+                        if (chiTestProgressContainer) chiTestProgressContainer.style.display = 'none'; // 隐藏进度条
+                    }
+
+                    if (data.status.result_file) { // 假设 result_file 存在于 CHI 状态中
+                        chiResultFileElement.textContent = `结果文件: ${data.status.result_file}`;
+                        chiResultFileElement.classList.remove('d-none');
+                    } else {
+                        chiResultFileElement.textContent = ''; // 清空
+                        chiResultFileElement.classList.add('d-none');
+                    }
+                }
+                return;
+            } else if (data.type === 'log_message') { // 处理后端日志消息
+                 log(data.message, data.level || "info");
+                return;
+            } else if (data.device && data.data) { // 旧的通用设备状态处理逻辑，保持兼容性，但应优先使用上面的 type specific handlers
+                const deviceName = data.device;
+                const statusData = data.data;
+                if (statusData.hasOwnProperty('initialized')) {
+                    updateStatusIndicator(`${deviceName}Status`, statusData.initialized);
+                }
+                log(`${deviceName} 状态更新 (generic): ${JSON.stringify(statusData)}`, "info");
+            } else {
+                log("收到未知类型的WebSocket消息: " + JSON.stringify(data), "warn");
+            }
+        }
+        
+        // 记录日志
+        function log(message, level = "info") {
+            const logContainer = document.getElementById('logContainer');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${level}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        // 绑定事件
+        function bindEvents() {
+            // 配置保存
+            document.getElementById('saveConfig').addEventListener('click', saveConfig);
+            
+            // 打印机相关
+            document.getElementById('initializePrinter').addEventListener('click', initializePrinter);
+            document.getElementById('movePrinter').addEventListener('click', movePrinter);
+            document.getElementById('moveToGrid').addEventListener('click', moveToGrid);
+            document.getElementById('homePrinter').addEventListener('click', homePrinter);
+            document.getElementById('getPrinterPosition').addEventListener('click', getPrinterPosition);
+            
+            // 添加泵和继电器事件绑定
+            bindPumpAndRelayEvents();
+            
+            // CHI事件绑定
+            bindChiEvents();
+        }
+        
+        // === 打印机功能 ===
+        
+        // 初始化打印机
+        async function initializePrinter() {
+            try {
+                log("正在初始化打印机...");
+                
+                const response = await fetch(`${apiBaseUrl}/api/printer/initialize`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                log(data.message, data.error ? "error" : "success");
+                
+                // 更新状态指示器
+                if (!data.error) {
+                    updateStatusIndicator('printerStatus', true);
+                }
+            } catch (error) {
+                log(`初始化打印机失败: ${error.message}`, "error");
+            }
+        }
+        
+        // 移动打印机
+        async function movePrinter() {
+            try {
+                const x = parseFloat(document.getElementById('printerX').value || 0);
+                const y = parseFloat(document.getElementById('printerY').value || 0);
+                const z = parseFloat(document.getElementById('printerZ').value || 0);
+                
+                log(`正在移动打印机到 (${x}, ${y}, ${z})...`);
+                
+                const response = await fetch(`${apiBaseUrl}/api/printer/move`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ x, y, z })
+                });
+                
+                const data = await response.json();
+                log(data.message, data.error ? "error" : "success");
+            } catch (error) {
+                log(`移动打印机失败: ${error.message}`, "error");
+            }
+        }
+        
+        // 移动到网格位置
+        async function moveToGrid() {
+            try {
+                const position = parseInt(document.getElementById('gridPosition').value || 1);
+                
+                log(`正在移动打印机到网格位置 ${position}...`);
+                
+                const response = await fetch(`${apiBaseUrl}/api/printer/grid`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ position })
+                });
+                
+                const data = await response.json();
+                log(data.message, data.error ? "error" : "success");
+            } catch (error) {
+                log(`移动到网格位置失败: ${error.message}`, "error");
+            }
+        }
+        
+        // 归位打印机
+        async function homePrinter() {
+            try {
+                log("正在归位打印机...");
+                
+                const response = await fetch(`${apiBaseUrl}/api/printer/home`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                log(data.message, data.error ? "error" : "success");
+            } catch (error) {
+                log(`归位打印机失败: ${error.message}`, "error");
+            }
+        }
+        
+        // 获取打印机位置
+        async function getPrinterPosition() {
+            try {
+                log("正在获取打印机位置...");
+                
+                const response = await fetch(`${apiBaseUrl}/api/printer/position`);
+                const data = await response.json();
+                
+                if (data.position) {
+                    const { x, y, z } = data.position;
+                    log(`打印机当前位置: X=${x?.toFixed(2) || 0}, Y=${y?.toFixed(2) || 0}, Z=${z?.toFixed(2) || 0}`, "success");
+                } else {
+                    log(data.message, data.error ? "error" : "info");
+                }
+            } catch (error) {
+                log(`获取打印机位置失败: ${error.message}`, "error");
+            }
+        }
+        
+        // === 泵功能 ===
+        
+        // 初始化泵
+        async function initializePump() {
+            try {
+                log("正在初始化泵...");
+                
+                const response = await fetch(`${apiBaseUrl}/api/pump/initialize`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                log(data.message, data.error ? "error" : "success");
+                
+                // 更新状态指示器
+                if (!data.error) {
+                    updateStatusIndicator('pumpStatus', true);
+                }
+            } catch (error) {
+                log(`初始化泵失败: ${error.message}`, "error");
+            }
+        }
+        
+        // 自动泵送
+        async function dispenseAuto() {
+            // 获取参数并确保有默认值
+            const pumpIndex = parseInt(document.getElementById('pumpIndex').value || "0");
+            const volume = parseFloat(document.getElementById('pumpVolume').value || "100");
+            const speed = document.getElementById('pumpSpeed').value || "medium";
+            const direction = parseInt(document.getElementById('pumpDirection').value || "1");
+                
+            console.log(`准备泵送: 泵=${pumpIndex}, 体积=${volume}μL, 速度=${speed}, 方向=${direction}`);
+                
+            try {    
+                // 重置和显示进度条和时间信息
+                const pumpProgressContainer = document.getElementById('pumpProgressContainer');
+                const pumpProgress = document.getElementById('pumpProgress');
+                const pumpTimeInfo = document.getElementById('pumpTimeInfo');
+                const pumpElapsedTime = document.getElementById('pumpElapsedTime');
+                const pumpTotalDuration = document.getElementById('pumpTotalDuration');
+                
+                pumpProgress.style.width = '0%';
+                pumpProgress.textContent = '0%';
+                pumpProgress.setAttribute('aria-valuenow', 0);
+                pumpElapsedTime.textContent = '0.0';
+                pumpTotalDuration.textContent = '计算中...';
+                pumpProgressContainer.style.display = 'flex';
+                pumpTimeInfo.style.display = 'block';
+                
+                // 发送API请求
+                const response = await fetch('/api/pump/dispense_auto', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        pump_index: pumpIndex,
+                        volume: volume,
+                        speed: speed,
+                        direction: direction
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.error) {
+                    showAlert('danger', `泵送失败: ${data.message}`);
+                    // 隐藏进度条和时间信息
+                    pumpProgressContainer.style.display = 'none';
+                    pumpTimeInfo.style.display = 'none';
+                    return;
+                }
+                
+                showAlert('success', data.message);
+            } catch (error) {
+                console.error('泵送请求失败:', error);
+                showAlert('danger', `泵送请求失败: ${error.message}`);
+                
+                // 隐藏进度条和时间信息
+                document.getElementById('pumpProgressContainer').style.display = 'none';
+                document.getElementById('pumpTimeInfo').style.display = 'none';
+            }
+        }
+        
+        // 定时泵送
+        async function dispenseTimed() {
+            // 获取参数并确保有默认值
+            const pumpIndex = parseInt(document.getElementById('pumpIndex').value || "0");
+            const duration = parseFloat(document.getElementById('pumpDuration').value || "5");
+            const rpm = parseFloat(document.getElementById('pumpRpm').value || "30");
+            const direction = parseInt(document.getElementById('pumpDirection').value || "1");
+                
+            console.log(`准备定时泵送: 泵=${pumpIndex}, 时长=${duration}秒, RPM=${rpm}, 方向=${direction}`);
+                
+            try {
+                // 重置和显示进度条和时间信息
+                const pumpProgressContainer = document.getElementById('pumpProgressContainer');
+                const pumpProgress = document.getElementById('pumpProgress');
+                const pumpTimeInfo = document.getElementById('pumpTimeInfo');
+                const pumpElapsedTime = document.getElementById('pumpElapsedTime');
+                const pumpTotalDuration = document.getElementById('pumpTotalDuration');
+                
+                pumpProgress.style.width = '0%';
+                pumpProgress.textContent = '0%';
+                pumpProgress.setAttribute('aria-valuenow', 0);
+                pumpElapsedTime.textContent = '0.0';
+                pumpTotalDuration.textContent = duration.toFixed(1);  // 直接显示用户输入的时长
+                pumpProgressContainer.style.display = 'flex';
+                pumpTimeInfo.style.display = 'block';
+                
+                // 发送API请求
+                const response = await fetch('/api/pump/dispense_timed', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        pump_index: pumpIndex,
+                        duration: duration,
+                        rpm: rpm,
+                        direction: direction
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.error) {
+                    showAlert('danger', `定时泵送失败: ${data.message}`);
+                    // 隐藏进度条和时间信息
+                    pumpProgressContainer.style.display = 'none';
+                    pumpTimeInfo.style.display = 'none';
+                    return;
+                }
+                
+                showAlert('success', data.message);
+            } catch (error) {
+                console.error('定时泵送请求失败:', error);
+                showAlert('danger', `定时泵送请求失败: ${error.message}`);
+                
+                // 隐藏进度条和时间信息
+                document.getElementById('pumpProgressContainer').style.display = 'none';
+                document.getElementById('pumpTimeInfo').style.display = 'none';
+            }
+        }
+        
+        // 停止泵
+        async function stopPump() {
+            // 获取参数并确保有默认值
+            const pumpIndex = parseInt(document.getElementById('pumpIndex').value || "0");
+                
+            console.log(`准备停止泵: 泵=${pumpIndex}`);
+                
+            try {
+                // 发送API请求
+                const response = await fetch('/api/pump/stop', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        pump_index: pumpIndex
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.error) {
+                    showAlert('danger', `停止泵失败: ${data.message}`);
+                    return;
+                }
+                
+                showAlert('success', data.message);
+                
+                // 不要在这里隐藏进度条和时间信息，让WebSocket消息来控制显示状态
+                // 这样用户可以看到停止时的最终进度
+            } catch (error) {
+                console.error('停止泵请求失败:', error);
+                showAlert('danger', `停止泵请求失败: ${error.message}`);
+            }
+        }
+        
+        // 获取泵状态
+        async function getPumpStatus() {
+            try {
+                const pumpIndex = parseInt(document.getElementById('pumpIndex').value || 0);
+                
+                log(`正在获取泵 ${pumpIndex} 状态...`);
+                
+                const response = await fetch(`${apiBaseUrl}/api/pump/status?pump_index=${pumpIndex}`);
+                const data = await response.json();
+                
+                if (data.status) {
+                    log(`泵 ${pumpIndex} 状态: ${JSON.stringify(data.status)}`, "success");
+                } else {
+                    log(data.message, data.error ? "error" : "info");
+                }
+            } catch (error) {
+                log(`获取泵状态失败: ${error.message}`, "error");
+            }
+        }
+        
+        // === 继电器功能 ===
+        
+        // 初始化继电器
+        async function initializeRelay() {
+            try {
+                log("正在初始化继电器...");
+                
+                const response = await fetch(`${apiBaseUrl}/api/relay/initialize`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                log(data.message, data.error ? "error" : "success");
+                
+                // 更新状态指示器
+                if (!data.error) {
+                    updateStatusIndicator('relayStatus', true);
+                    
+                    // 获取最新的继电器状态
+                    await getRelayStatus();
+                }
+            } catch (error) {
+                log(`初始化继电器失败: ${error.message}`, "error");
+            }
+        }
+        
+        // 切换继电器状态
+        async function toggleRelay(relayIndex) {
+            try {
+                log(`正在切换继电器 ${relayIndex} 状态...`);
+                
+                const response = await fetch(`${apiBaseUrl}/api/relay/toggle`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ relay_index: relayIndex })
+                });
+                
+                const data = await response.json();
+                log(data.message, data.error ? "error" : "success");
+                
+                // 获取最新的继电器状态
+                if (!data.error) {
+                    await getRelayStatus();
+                }
+            } catch (error) {
+                log(`切换继电器 ${relayIndex} 状态失败: ${error.message}`, "error");
+            }
+        }
+        
+        // 获取继电器状态
+        async function getRelayStatus() {
+            try {
+                log("正在获取继电器状态...");
+                
+                const response = await fetch(`${apiBaseUrl}/api/relay/status`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    log(data.message || "获取继电器状态失败", "error");
+                    // 即使出错，也尝试将所有继电器UI设置回"未知"
+                    for (let i = 1; i <= 4; i++) {
+                        const badgeElement = document.getElementById(`relay${i}Status`);
+                        if (badgeElement) {
+                            badgeElement.textContent = "未知";
+                            badgeElement.className = "badge bg-secondary";
+                        }
+                    }
+                    return;
+                }
+
+                if (data.states) { // data.states 应该是 {"1": "on", "2": "off", ...}
+                    const statuses = data.states;
+                    
+                    // 更新界面上的继电器状态
+                    for (let i = 1; i <= 4; i++) {
+                        const relayIdString = String(i); // 键是字符串 "1", "2", ...
+                        const statusText = statuses[relayIdString]; // "on" 或 "off"
+                        const badgeElement = document.getElementById(`relay${i}Status`);
+                        
+                        if (badgeElement) {
+                            if (statusText === "on") {
+                                badgeElement.textContent = "开启";
+                                badgeElement.className = "badge bg-success";
+                            } else if (statusText === "off") {
+                                badgeElement.textContent = "关闭";
+                                badgeElement.className = "badge bg-danger"; // 使用 bg-danger 标记关闭状态
+                            } else {
+                                badgeElement.textContent = "未知"; // 如果状态不是 "on" 或 "off"
+                                badgeElement.className = "badge bg-secondary";
+                            }
+                        }
+                    }
+                    log(`继电器状态已更新: ${JSON.stringify(statuses)}`, "success");
+                } else {
+                    log("获取到的继电器状态数据格式不正确或无状态信息。", "warn");
+                     for (let i = 1; i <= 4; i++) {
+                        const badgeElement = document.getElementById(`relay${i}Status`);
+                        if (badgeElement) {
+                            badgeElement.textContent = "未知";
+                            badgeElement.className = "badge bg-secondary";
+                        }
+                    }
+                }
+            } catch (error) {
+                log(`获取继电器状态异常: ${error.message}`, "error");
+                 for (let i = 1; i <= 4; i++) {
+                    const badgeElement = document.getElementById(`relay${i}Status`);
+                    if (badgeElement) {
+                        badgeElement.textContent = "未知";
+                        badgeElement.className = "badge bg-secondary";
+                    }
+                }
+            }
+        }
+        
+        // 绑定泵和继电器事件
+        function bindPumpAndRelayEvents() {
+            // 泵事件
+            document.getElementById('initializePump').addEventListener('click', initializePump);
+            document.getElementById('dispenseAuto').addEventListener('click', dispenseAuto);
+            document.getElementById('dispenseTimed').addEventListener('click', dispenseTimed);
+            document.getElementById('stopPump').addEventListener('click', stopPump);
+            document.getElementById('getPumpStatus').addEventListener('click', getPumpStatus);
+            document.getElementById('testPumpWebSocket').addEventListener('click', testPumpWebSocket);
+            
+            // 继电器事件
+            document.getElementById('initializeRelay').addEventListener('click', initializeRelay);
+            document.getElementById('getRelayStatus').addEventListener('click', getRelayStatus);
+            
+            // 切换继电器按钮
+            document.querySelectorAll('.toggle-relay').forEach(button => {
+                button.addEventListener('click', function() {
+                    const relayId = parseInt(this.getAttribute('data-relay'));
+                    toggleRelay(relayId);
+                });
+            });
+        }
+        
+        // 测试泵WebSocket
+        function testPumpWebSocket() {
+            if (!wsConnection || wsConnection.readyState !== WebSocket.OPEN) {
+                log("WebSocket未连接，无法发送测试消息", "error");
+                return;
+            }
+            
+            // 模拟一个泵状态消息，测试前端处理
+            const testMessage = {
+                type: "pump_status",
+                status: {
+                    running: true,
+                    pump_index: parseInt(document.getElementById('pumpIndex').value || "0"),
+                    volume: 100,
+                    progress: 0.5,
+                    direction: 1,
+                    elapsed_time_seconds: 5.0,
+                    total_duration_seconds: 10.0,
+                    rpm: 20,
+                    revolutions: 1.25,
+                    raw_response: "测试消息"
+                },
+                initialized: true
+            };
+            
+            // 手动处理测试消息
+            log("正在测试WebSocket消息处理...", "info");
+            handleWebSocketMessage(testMessage);
+            log("测试完成，请检查泵进度条是否显示并更新", "success");
+        }
+        
+        // === CHI功能 ===
+        
+        // 全局变量，用于存储CHI状态
+        let chiElapsedTimer = null;
+        let chiStartTime = 0;
+        
+        // 初始化CHI工作站
+        async function initializeChi() {
+            try {
+                log("正在初始化CHI工作站...");
+                
+                const response = await fetch(`${apiBaseUrl}/api/chi/initialize`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                log(data.message, data.error ? "error" : "success");
+                
+                // 更新状态指示器
+                if (!data.error) {
+                    updateStatusIndicator('chiStatus', true);
+                }
+            } catch (error) {
+                log(`初始化CHI工作站失败: ${error.message}`, "error");
+            }
+        }
+        
+        // 运行CV测试
+        async function runCvTest() {
+            try {
+                // 收集表单参数
+                const params = {
+                    ei: parseFloat(document.getElementById('cvEi').value || 0),
+                    eh: parseFloat(document.getElementById('cvHv').value || 0.5),
+                    el: parseFloat(document.getElementById('cvLv').value || -0.5),
+                    v: parseFloat(document.getElementById('cvSr').value || 0.1),
+                    cl: parseInt(document.getElementById('cvCycles').value || 3),
+                    si: parseFloat(document.getElementById('cvSi').value || 0.001),
+                    sens: parseFloat(document.getElementById('cvSens').value || 1e-5),
+                    qt: 2.0, // 默认静置时间
+                    pn: document.getElementById('cvPn').value || 'p',
+                    autosens: document.getElementById('cvAutosens').checked
+                };
+                
+                log(`正在运行CV测试: 初始电位=${params.ei}V, 高电位=${params.eh}V, 低电位=${params.el}V, 扫描速率=${params.v}V/s, 循环=${params.cl}次, 方向=${params.pn}...`);
+                
+                // 重置并显示进度条
+                resetChiStatus("CV");
+                
+                const response = await fetch(`${apiBaseUrl}/api/chi/cv`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(params)
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    log(data.message, "error");
+                    stopChiStatusTracking();
+                } else {
+                    log(data.message, "success");
+                    if (data.file_name && document.getElementById('chiResultFile')) {
+                        document.getElementById('chiResultFile').textContent = data.file_name;
+                    }
+                }
+            } catch (error) {
+                log(`运行CV测试失败: ${error.message}`, "error");
+                stopChiStatusTracking();
+            }
+        }
+        
+        // 运行CA测试
+        async function runCaTest() {
+            try {
+                // 收集表单参数
+                const params = {
+                    ei: parseFloat(document.getElementById('caVoltage').value || -0.3),
+                    eh: parseFloat(document.getElementById('caHv').value || 0.2),
+                    el: parseFloat(document.getElementById('caLv').value || -0.8),
+                    cl: parseInt(document.getElementById('caTime').value || 10),
+                    pw: parseFloat(document.getElementById('caPw').value || 0.5),
+                    si: parseFloat(document.getElementById('caInterval').value || 0.1),
+                    sens: parseFloat(document.getElementById('caRange').value || 1e-4),
+                    qt: 2.0, // 默认静置时间
+                    pn: document.getElementById('caPn').value || 'p',
+                    autosens: document.getElementById('caAutosens').checked
+                };
+                
+                log(`正在运行CA测试: 初始电位=${params.ei}V, 高电位=${params.eh}V, 低电位=${params.el}V, 阶跃数=${params.cl}, 脉冲宽度=${params.pw}s, 采样间隔=${params.si}s...`);
+                
+                // 重置并显示进度条
+                resetChiStatus("CA");
+                
+                const response = await fetch(`${apiBaseUrl}/api/chi/ca`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(params)
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    log(data.message, "error");
+                    stopChiStatusTracking();
+                } else {
+                    log(data.message, "success");
+                    if (data.file_name && document.getElementById('chiResultFile')) {
+                        document.getElementById('chiResultFile').textContent = data.file_name;
+                    }
+                }
+            } catch (error) {
+                log(`运行CA测试失败: ${error.message}`, "error");
+                stopChiStatusTracking();
+            }
+        }
+        
+        // 运行EIS测试
+        async function runEisTest() {
+            try {
+                const freq_init = parseFloat(document.getElementById('eisFreqInit').value || 100000);
+                const freq_final = parseFloat(document.getElementById('eisFreqFinal').value || 0.1);
+                const amplitude = parseFloat(document.getElementById('eisAmplitude').value || 10);
+                const voltage = parseFloat(document.getElementById('eisVoltage').value || 0);
+                
+                log(`正在运行EIS测试: 初始频率=${freq_init}Hz, 最终频率=${freq_final}Hz, 幅度=${amplitude}mV, 电压=${voltage}V...`);
+                
+                // 重置并显示进度条
+                resetChiStatus("EIS");
+                
+                const response = await fetch(`${apiBaseUrl}/api/chi/eis`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ freq_init, freq_final, amplitude, voltage })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    log(data.message, "error");
+                    stopChiStatusTracking();
+                } else {
+                    log(data.message, "success");
+                    if (data.result_file) {
+                        document.getElementById('chiResultFile').textContent = data.result_file;
+                    }
+                }
+            } catch (error) {
+                log(`运行EIS测试失败: ${error.message}`, "error");
+                stopChiStatusTracking();
+            }
+        }
+
+        // 运行LSV测试
+        async function runLsvTest() {
+            try {
+                const initial_v = parseFloat(document.getElementById('lsvInitialV').value);
+                const final_v = parseFloat(document.getElementById('lsvFinalV').value);
+                const scan_rate = parseFloat(document.getElementById('lsvScanRate').value);
+                const sens_str = document.getElementById('lsvSens').value; // Keep as string for now, parse in backend or use as is if CHI tool expects string
+                const sens = parseFloat(sens_str); // Or attempt to parse if needed immediately
+
+                log(`正在运行LSV测试: 初始电压=${initial_v}V, 最终电压=${final_v}V, 扫描速率=${scan_rate}V/s, 灵敏度=${sens_str}...`);
+                resetChiStatus("LSV");
+
+                const response = await fetch(`${apiBaseUrl}/api/chi/lsv`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ initial_v, final_v, scan_rate, sens }) // Sending parsed sens
+                });
+                const data = await response.json();
+                if (data.error) {
+                    log(data.message, "error");
+                    stopChiStatusTracking();
+                } else {
+                    log(data.message, "success");
+                    if (data.result_file) document.getElementById('chiResultFile').textContent = data.result_file;
+                }
+            } catch (error) {
+                log(`运行LSV测试失败: ${error.message}`, "error");
+                stopChiStatusTracking();
+            }
+        }
+
+        // 运行IT测试
+        async function runItTest() {
+            try {
+                const params = {
+                    ei: parseFloat(document.getElementById('itVoltage').value),
+                    st: parseFloat(document.getElementById('itDuration').value),
+                    si: parseFloat(document.getElementById('itInterval').value),
+                    sens: parseFloat(document.getElementById('itSens').value),
+                    file_name: document.getElementById('itFileName')?.value || `IT_Test_${Date.now()}`
+                };
+
+                if (isNaN(params.ei) || isNaN(params.st) || isNaN(params.si) || isNaN(params.sens)) {
+                    log('IT测试参数错误: 所有数值字段均为必填项。', 'error');
+                    return;
+                }
+
+                log(`正在启动 IT 测试: 电位=${params.ei}V, 持续时间=${params.st}s, 采样间隔=${params.si}s, 文件名=${params.file_name}`);
+                resetChiStatus("IT");
+
+                const response = await fetch(`${apiBaseUrl}/api/chi/it`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(params)
+                });
+                const result = await response.json();
+                if (result.error) {
+                    log(`IT 测试启动失败: ${result.message}`, 'error');
+                    stopChiStatusTracking();
+                } else {
+                    log(`IT 测试已启动: ${result.message}, 文件名: ${result.file_name}`, 'success');
+                    if (result.file_name && document.getElementById('chiResultFile')) {
+                        document.getElementById('chiResultFile').textContent = result.file_name;
+                    }
+                }
+            } catch (error) {
+                log(`IT 测试请求失败: ${error}`, 'error');
+                stopChiStatusTracking();
+            }
+        }
+        
+        // 运行OCP测试
+        async function runOcpTest() {
+            const params = {
+                st: parseFloat(document.getElementById('ocpSt').value),
+                si: parseFloat(document.getElementById('ocpSi').value),
+                eh: document.getElementById('ocpEh').value ? parseFloat(document.getElementById('ocpEh').value) : null,
+                el: document.getElementById('ocpEl').value ? parseFloat(document.getElementById('ocpEl').value) : null,
+                file_name: document.getElementById('ocpFileName').value ? document.getElementById('ocpFileName').value : null,
+            };
+
+            if (isNaN(params.st) || isNaN(params.si)) {
+                log('OCP测试参数错误: 运行时间 (st) 和采样间隔 (si) 是必填项。', 'error');
+                return;
+            }
+            
+            log(`正在启动 OCP 测试: 文件名: ${params.file_name || 'OCP_Default'}...`);
+            resetChiStatus("OCP");
+
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/chi/ocp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(params)
+                });
+                const result = await response.json();
+                if (result.error) {
+                    log(`OCP 测试启动失败: ${result.message}`, 'error');
+                    stopChiStatusTracking();
+                } else {
+                    log(`OCP 测试已启动: ${result.message}, 文件名: ${result.file_name}`, 'success');
+                    if (result.file_name && document.getElementById('chiResultFile')) {
+                        document.getElementById('chiResultFile').textContent = result.file_name;
+                    }
+                }
+            } catch (error) {
+                log(`OCP 测试请求失败: ${error}`, 'error');
+                stopChiStatusTracking();
+            }
+        }
+        
+        // 运行DPV测试
+        async function runDpvTest() {
+            // 收集表单参数
+            const params = {
+                ei: parseFloat(document.getElementById('dpvEi').value),
+                ef: parseFloat(document.getElementById('dpvEf').value),
+                incre: parseFloat(document.getElementById('dpvIncre').value),
+                amp: parseFloat(document.getElementById('dpvAmp').value),
+                pw: parseFloat(document.getElementById('dpvPw').value),
+                sw: parseFloat(document.getElementById('dpvSw').value),
+                prod: parseFloat(document.getElementById('dpvProd').value),
+                autosens: document.getElementById('dpvAutosens').checked
+            };
+            
+            // 如果没有启用自动灵敏度，则添加灵敏度参数
+            if (!params.autosens) {
+                params.sens = parseFloat(document.getElementById('dpvSens').value);
+            }
+            
+            // 添加可选参数
+            if (document.getElementById('dpvFileName').value) {
+                params.file_name = document.getElementById('dpvFileName').value;
+            }
+            
+            // 验证必填参数
+            const requiredFields = ['ei', 'ef', 'incre', 'amp', 'pw', 'sw', 'prod'];
+            const missingFields = requiredFields.filter(field => isNaN(params[field]));
+            
+            if (missingFields.length > 0) {
+                log(`DPV测试参数错误: 以下必填项没有有效值: ${missingFields.join(', ')}`, 'error');
+                return;
+            }
+            
+            // 显示启动测试的日志
+            log(`正在启动DPV测试: 初始电位=${params.ei}V, 最终电位=${params.ef}V, 电位增量=${params.incre}V...`);
+            resetChiStatus("DPV");
+            
+            try {
+                // 调用API
+                const response = await fetch(`${apiBaseUrl}/api/chi/dpv`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(params)
+                });
+                
+                const result = await response.json();
+                
+                if (result.error) {
+                    log(`DPV测试启动失败: ${result.message}`, 'error');
+                    stopChiStatusTracking();
+                } else {
+                    log(`DPV测试已启动: ${result.message}, 文件名: ${result.file_name}`, 'success');
+                    if (result.file_name && document.getElementById('chiResultFile')) {
+                        document.getElementById('chiResultFile').textContent = result.file_name;
+                    }
+                }
+            } catch (error) {
+                log(`DPV测试请求失败: ${error}`, 'error');
+                stopChiStatusTracking();
+            }
+        }
+        
+        // 运行SCV测试
+        async function runScvTest() {
+            // 收集表单参数
+            const params = {
+                ei: parseFloat(document.getElementById('scvEi').value),
+                ef: parseFloat(document.getElementById('scvEf').value),
+                incre: parseFloat(document.getElementById('scvIncre').value),
+                sw: parseFloat(document.getElementById('scvSw').value),
+                prod: parseFloat(document.getElementById('scvProd').value),
+                autosens: document.getElementById('scvAutosens').checked
+            };
+            
+            // 如果没有启用自动灵敏度，则添加灵敏度参数
+            if (!params.autosens) {
+                params.sens = parseFloat(document.getElementById('scvSens').value);
+            }
+            
+            // 添加可选参数
+            if (document.getElementById('scvFileName').value) {
+                params.file_name = document.getElementById('scvFileName').value;
+            }
+            
+            // 验证必填参数
+            const requiredFields = ['ei', 'ef', 'incre', 'sw', 'prod'];
+            const missingFields = requiredFields.filter(field => isNaN(params[field]));
+            
+            if (missingFields.length > 0) {
+                log(`SCV测试参数错误: 以下必填项没有有效值: ${missingFields.join(', ')}`, 'error');
+                return;
+            }
+            
+            // 显示启动测试的日志
+            log(`正在启动SCV测试: 初始电位=${params.ei}V, 最终电位=${params.ef}V, 电位增量=${params.incre}V...`);
+            resetChiStatus("SCV");
+            
+            try {
+                // 调用API
+                const response = await fetch(`${apiBaseUrl}/api/chi/scv`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(params)
+                });
+                
+                const result = await response.json();
+                
+                if (result.error) {
+                    log(`SCV测试启动失败: ${result.message}`, 'error');
+                    stopChiStatusTracking();
+                } else {
+                    log(`SCV测试已启动: ${result.message}, 文件名: ${result.file_name}`, 'success');
+                    if (result.file_name && document.getElementById('chiResultFile')) {
+                        document.getElementById('chiResultFile').textContent = result.file_name;
+                    }
+                }
+            } catch (error) {
+                log(`SCV测试请求失败: ${error}`, 'error');
+                stopChiStatusTracking();
+            }
+        }
+        
+        // 运行CP测试
+        async function runCpTest() {
+            // 收集表单参数
+            const params = {
+                ic: parseFloat(document.getElementById('cpIc').value),
+                ia: parseFloat(document.getElementById('cpIa').value),
+                tc: parseFloat(document.getElementById('cpTc').value),
+                ta: parseFloat(document.getElementById('cpTa').value),
+                eh: parseFloat(document.getElementById('cpEh').value),
+                el: parseFloat(document.getElementById('cpEl').value),
+                pn: document.getElementById('cpPn').value,
+                si: parseFloat(document.getElementById('cpSi').value),
+                cl: parseInt(document.getElementById('cpCl').value),
+                priority: document.getElementById('cpPriority').value
+            };
+            
+            // 添加可选参数
+            if (document.getElementById('cpFileName').value) {
+                params.file_name = document.getElementById('cpFileName').value;
+            }
+            
+            // 验证必填参数
+            const requiredFields = ['ic', 'ia', 'tc', 'ta', 'eh', 'el', 'si', 'cl'];
+            const missingFields = requiredFields.filter(field => isNaN(params[field]));
+            
+            if (missingFields.length > 0) {
+                log(`CP测试参数错误: 以下必填项没有有效值: ${missingFields.join(', ')}`, 'error');
+                return;
+            }
+            
+            // 显示启动测试的日志
+            log(`正在启动CP测试: 阴极电流=${params.ic}A, 阳极电流=${params.ia}A, 阴极时间=${params.tc}s, 阳极时间=${params.ta}s...`);
+            resetChiStatus("CP");
+            
+            try {
+                // 调用API
+                const response = await fetch(`${apiBaseUrl}/api/chi/cp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(params)
+                });
+                
+                const result = await response.json();
+                
+                if (result.error) {
+                    log(`CP测试启动失败: ${result.message}`, 'error');
+                    stopChiStatusTracking();
+                } else {
+                    log(`CP测试已启动: ${result.message}, 文件名: ${result.file_name}`, 'success');
+                    if (result.file_name && document.getElementById('chiResultFile')) {
+                        document.getElementById('chiResultFile').textContent = result.file_name;
+                    }
+                }
+            } catch (error) {
+                log(`CP测试请求失败: ${error}`, 'error');
+                stopChiStatusTracking();
+            }
+        }
+        
+        // 运行ACV测试
+        async function runAcvTest() {
+            // 收集表单参数
+            const params = {
+                ei: parseFloat(document.getElementById('acvEi').value),
+                ef: parseFloat(document.getElementById('acvEf').value),
+                incre: parseFloat(document.getElementById('acvIncre').value),
+                amp: parseFloat(document.getElementById('acvAmp').value),
+                freq: parseFloat(document.getElementById('acvFreq').value),
+                quiet: parseFloat(document.getElementById('acvQuiet').value),
+                sens: parseFloat(document.getElementById('acvSens').value)
+            };
+            
+            // 添加可选参数
+            if (document.getElementById('acvFileName').value) {
+                params.file_name = document.getElementById('acvFileName').value;
+            }
+            
+            // 验证必填参数
+            const requiredFields = ['ei', 'ef', 'incre', 'amp', 'freq'];
+            const missingFields = requiredFields.filter(field => isNaN(params[field]));
+            
+            if (missingFields.length > 0) {
+                log(`ACV测试参数错误: 以下必填项没有有效值: ${missingFields.join(', ')}`, 'error');
+                return;
+            }
+            
+            // 显示启动测试的日志
+            log(`正在启动ACV测试: 初始电位=${params.ei}V, 最终电位=${params.ef}V, 电位增量=${params.incre}V, 频率=${params.freq}Hz...`);
+            resetChiStatus("ACV");
+            
+            try {
+                // 调用API
+                const response = await fetch(`${apiBaseUrl}/api/chi/acv`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(params)
+                });
+                
+                const result = await response.json();
+                
+                if (result.error) {
+                    log(`ACV测试启动失败: ${result.message}`, 'error');
+                    stopChiStatusTracking();
+                } else {
+                    log(`ACV测试已启动: ${result.message}, 文件名: ${result.file_name}`, 'success');
+                    if (result.file_name && document.getElementById('chiResultFile')) {
+                        document.getElementById('chiResultFile').textContent = result.file_name;
+                    }
+                }
+            } catch (error) {
+                log(`ACV测试请求失败: ${error}`, 'error');
+                stopChiStatusTracking();
+            }
+        }
+        
+        // 停止CHI测试
+        async function stopChiTest() {
+            try {
+                log("正在停止CHI测试...");
+                
+                const response = await fetch(`${apiBaseUrl}/api/chi/stop`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                log(data.message, data.error ? "error" : "success");
+                
+                // 停止状态更新
+                stopChiStatusTracking();
+            } catch (error) {
+                log(`停止CHI测试失败: ${error.message}`, "error");
+            }
+        }
+        
+        // 获取CHI测试结果列表
+        async function getChiResults() {
+            try {
+                log("正在获取CHI测试结果列表...");
+                
+                const response = await fetch(`${apiBaseUrl}/api/chi/results`);
+                const data = await response.json();
+                
+                if (data.results) {
+                    // 更新结果列表
+                    updateChiResultsList(data.results);
+                    log(`获取到 ${data.results.length} 个测试结果文件`, "success");
+                } else {
+                    log(data.message, data.error ? "error" : "info");
+                }
+            } catch (error) {
+                log(`获取CHI测试结果列表失败: ${error.message}`, "error");
+            }
+        }
+        
+        // 更新CHI结果列表
+        function updateChiResultsList(results) {
+            const listElement = document.getElementById('chiResultsList');
+            listElement.innerHTML = '';
+            
+            if (results.length === 0) {
+                listElement.innerHTML = '<div class="list-group-item">没有测试结果文件</div>';
+                return;
+            }
+            
+            for (const result of results) {
+                const item = document.createElement('a');
+                item.className = 'list-group-item list-group-item-action';
+                item.href = `${apiBaseUrl}/api/chi/download?file=${encodeURIComponent(result.path)}`;
+                item.target = '_blank';
+                
+                const date = new Date(result.time * 1000).toLocaleString();
+                item.innerHTML = `
+                    <div class="d-flex w-100 justify-content-between">
+                        <h5 class="mb-1">${result.name}</h5>
+                        <small>${date}</small>
+                    </div>
+                    <p class="mb-1">${result.type} 测试 - ${(result.size / 1024).toFixed(2)} KB</p>
+                `;
+                
+                listElement.appendChild(item);
+            }
+        }
+        
+        // 重置CHI状态显示
+        function resetChiStatus(testType) {
+            document.getElementById('chiTestType').textContent = testType;
+            document.getElementById('chiTestStatus').textContent = "运行中";
+            document.getElementById('chiElapsedTime').textContent = "0s";
+            
+            // 显示并重置进度条
+            document.getElementById('chiProgressContainer').style.display = 'block';
+            document.getElementById('chiProgress').style.width = '0%';
+            document.getElementById('chiProgress').textContent = '0%';
+            
+            // 开始计时
+            chiStartTime = Date.now();
+            if (chiElapsedTimer) {
+                clearInterval(chiElapsedTimer);
+            }
+            
+            chiElapsedTimer = setInterval(updateChiElapsedTime, 1000);
+            
+            // 开始轮询状态
+            pollChiStatus();
+        }
+        
+        // 更新经过时间
+        function updateChiElapsedTime() {
+            const elapsedSeconds = Math.floor((Date.now() - chiStartTime) / 1000);
+            document.getElementById('chiElapsedTime').textContent = `${elapsedSeconds}s`;
+        }
+        
+        // 停止CHI状态跟踪
+        function stopChiStatusTracking() {
+            if (chiElapsedTimer) {
+                clearInterval(chiElapsedTimer);
+                chiElapsedTimer = null;
+            }
+        }
+        
+        // 轮询CHI状态
+        async function pollChiStatus() {
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/chi/status`);
+                const data = await response.json();
+                
+                if (data.status) {
+                    const { status, progress, test_type, elapsed_time } = data.status;
+                    
+                    // 更新状态显示
+                    document.getElementById('chiTestStatus').textContent = status;
+                    document.getElementById('chiTestType').textContent = test_type || "未知";
+                    
+                    // 更新进度条
+                    if (progress !== undefined) {
+                        const progressPercent = Math.round(progress * 100);
+                        document.getElementById('chiProgress').style.width = `${progressPercent}%`;
+                        document.getElementById('chiProgress').textContent = `${progressPercent}%`;
+                    }
+                    
+                    // 如果测试仍在运行，继续轮询
+                    if (status === "running" || status === "initializing") {
+                        setTimeout(pollChiStatus, 1000);
+                    } else {
+                        // 测试完成或出错，停止跟踪
+                        if (status === "completed") {
+                            log(`CHI ${test_type || ""} 测试已完成`, "success");
+                        } else if (status === "error") {
+                            log(`CHI ${test_type || ""} 测试出错`, "error");
+                        }
+                        stopChiStatusTracking();
+                    }
+                } else {
+                    // 获取状态失败，等待一段时间后重试
+                    setTimeout(pollChiStatus, 2000);
+                }
+            } catch (error) {
+                console.error("轮询CHI状态出错:", error);
+                // 出错后等待更长时间再重试
+                setTimeout(pollChiStatus, 3000);
+            }
+        }
+        
+        // 绑定CHI事件
+        function bindChiEvents() {
+            document.getElementById('initializeChi').addEventListener('click', initializeChi);
+            document.getElementById('runCvTest').addEventListener('click', runCvTest);
+            document.getElementById('runCaTest').addEventListener('click', runCaTest);
+            document.getElementById('runEisTest').addEventListener('click', runEisTest);
+            document.getElementById('runLsvTest').addEventListener('click', runLsvTest);
+            document.getElementById('runItTest').addEventListener('click', runItTest);
+            document.getElementById('runOcpTest').addEventListener('click', runOcpTest);
+            document.getElementById('runDpvTest').addEventListener('click', runDpvTest);
+            document.getElementById('runScvTest').addEventListener('click', runScvTest);
+            document.getElementById('runCpTest').addEventListener('click', runCpTest);
+            document.getElementById('runAcvTest').addEventListener('click', runAcvTest);
+            document.getElementById('stopChiTest').addEventListener('click', stopChiTest);
+            document.getElementById('getChiResults').addEventListener('click', getChiResults);
+        }
+        
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', initialize);
+
+        // 显示警告信息
+        function showAlert(type, message) {
+            // 使用已有的log函数，将类型映射
+            const typeMap = {
+                'success': 'success',
+                'danger': 'error',
+                'warning': 'warning',
+                'info': 'info'
+            };
+            const logType = typeMap[type] || 'info';
+            log(message, logType);
+        }
+    </script>
+</body>
+</html> 
