@@ -156,6 +156,36 @@ class ITAPIParams(BaseModel):
     sens: Optional[float] = 1e-5  # 灵敏度
     file_name: Optional[str] = None  # 文件名
 
+# Pydantic Models for Printer Info API
+class GeneralLimits(BaseModel):
+    min_x: float
+    max_x: float
+    min_y: float
+    max_y: float
+    min_z: float
+    max_z: float
+
+class GridCell(BaseModel):
+    grid_number: int
+    row: int
+    col: int
+    center_x: float
+    center_y: float
+
+class GridConfig(BaseModel):
+    rows: int
+    cols: int
+    x_min: float
+    x_max: float
+    y_min: float
+    y_max: float
+    z_height: float
+    grid_mapping: List[GridCell]
+
+class PrinterInfoResponse(BaseModel):
+    general_limits: GeneralLimits
+    grid_config: GridConfig
+
 # 添加CORS
 app.add_middleware(
     CORSMiddleware,
@@ -404,6 +434,55 @@ async def get_printer_position():
     except Exception as e:
         logger.error(f"获取打印机位置失败: {e}")
         return {"error": True, "message": f"获取打印机位置失败: {e}"}
+
+# 获取打印机详细信息（包括网格配置）
+@app.get("/api/printer/info", response_model=PrinterInfoResponse)
+async def get_printer_info():
+    # Default values based on PrinterControl class in control_printer.py
+    general_min_x, general_min_y, general_min_z = 0.0, 0.0, 75.0
+    general_max_x, general_max_y, general_max_z = 215.0, 190.0, 200.0
+
+    grid_rows = 5
+    grid_cols = 10
+    grid_area_x_min, grid_area_x_max = 6.0, 174.0  # Grid X boundaries
+    grid_area_y_min, grid_area_y_max = 100.0, 173.0 # Grid Y boundaries
+    grid_z_height = 75.0
+
+    grid_mapping_list = []
+    for grid_number_abs in range(1, (grid_rows * grid_cols) + 1):
+        row_calc = (grid_number_abs - 1) // grid_cols + 1
+        col_calc = (grid_number_abs - 1) % grid_cols + 1
+
+        center_x_calc = grid_area_x_max - (col_calc - 1) * (grid_area_x_max - grid_area_x_min) / (grid_cols - 1 if grid_cols > 1 else 1)
+        center_y_calc = grid_area_y_max - (row_calc - 1) * (grid_area_y_max - grid_area_y_min) / (grid_rows - 1 if grid_rows > 1 else 1)
+        
+        grid_mapping_list.append(
+            GridCell(
+                grid_number=grid_number_abs,
+                row=row_calc,
+                col=col_calc,
+                center_x=round(center_x_calc, 2),
+                center_y=round(center_y_calc, 2)
+            )
+        )
+
+    return PrinterInfoResponse(
+        general_limits=GeneralLimits(
+            min_x=general_min_x, max_x=general_max_x,
+            min_y=general_min_y, max_y=general_max_y,
+            min_z=general_min_z, max_z=general_max_z
+        ),
+        grid_config=GridConfig(
+            rows=grid_rows,
+            cols=grid_cols,
+            x_min=grid_area_x_min,
+            x_max=grid_area_x_max,
+            y_min=grid_area_y_min,
+            y_max=grid_area_y_max,
+            z_height=grid_z_height,
+            grid_mapping=grid_mapping_list
+        )
+    )
 
 # =========== 泵API ===========
 

@@ -50,6 +50,31 @@
             border-right: 1px solid #dee2e6;
             border-bottom: 1px solid #dee2e6;
         }
+        #gridVisualizationContainer {
+            display: grid;
+            border: 1px solid #ccc;
+            /* width: 100%; /* Default if not overridden by col-md-X */
+            /* height: 300px; /* Example height */
+            position: relative; /* For absolute positioning of the pointer */
+        }
+        .grid-cell {
+            border: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+            box-sizing: border-box;
+        }
+        #printerPositionPointer {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: red;
+            border-radius: 50%;
+            display: none; /* Initially hidden */
+            transform: translate(-50%, -50%); /* Center the pointer */
+            z-index: 10; /* Ensure it's above grid cells */
+        }
     </style>
 </head>
 <body>
@@ -98,7 +123,7 @@
                     <div class="col-md-3">
                         <div class="mb-3">
                             <span class="status-indicator" id="printerStatus"></span>
-                            <span>打印机</span>
+                            <span>位置控制</span>
                         </div>
                     </div>
                     <div class="col-md-3">
@@ -126,7 +151,7 @@
         <!-- 设备测试选项卡 -->
         <ul class="nav nav-tabs" id="deviceTabs" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="printer-tab" data-bs-toggle="tab" data-bs-target="#printer" type="button" role="tab">打印机</button>
+                <button class="nav-link active" id="printer-tab" data-bs-toggle="tab" data-bs-target="#printer" type="button" role="tab">位置控制</button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="pump-tab" data-bs-toggle="tab" data-bs-target="#pump" type="button" role="tab">泵</button>
@@ -144,7 +169,7 @@
             <div class="tab-pane fade show active" id="printer" role="tabpanel" aria-labelledby="printer-tab">
                 <div class="row">
                     <div class="col-md-12 mb-3">
-                        <button type="button" class="btn btn-primary" id="initializePrinter">初始化打印机</button>
+                        <button type="button" class="btn btn-primary" id="initializePrinter">初始化位置控制</button>
                     </div>
                 </div>
                 
@@ -183,22 +208,7 @@
                     </div>
                     
                     <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">网格位置</h5>
-                            </div>
-                            <div class="card-body">
-                                <form id="printerGridForm">
-                                    <div class="mb-3">
-                                        <label for="gridPosition" class="form-label">网格位置 (1-50)</label>
-                                        <select class="form-select" id="gridPosition">
-                                            <option selected disabled>选择网格位置</option>
-                                        </select>
-                                    </div>
-                                    <button type="button" class="btn btn-primary" id="moveToGrid">移动到网格</button>
-                                </form>
-                            </div>
-                        </div>
+                        <!-- Old Grid Controls Removed -->
                     </div>
                 </div>
                 
@@ -212,6 +222,26 @@
                                 <button type="button" class="btn btn-primary me-2" id="homePrinter">归位</button>
                                 <button type="button" class="btn btn-secondary" id="getPrinterPosition">获取当前位置</button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 位置可视化面板 -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">位置可视化 (Position Visualization)</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-12"> <!-- Adjust column width as needed, e.g., col-md-8 offset-md-2 for centering -->
+                                <div id="gridVisualizationContainer" style="height: 300px; width: 100%;">
+                                    <!-- Grid cells will be generated here by JavaScript -->
+                                    <div id="printerPositionPointer"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-center">
+                            <span>当前坐标: X=<span id="currentXCoord">N/A</span>, Y=<span id="currentYCoord">N/A</span>, Z=<span id="currentZCoord">N/A</span></span>
                         </div>
                     </div>
                 </div>
@@ -1145,6 +1175,8 @@
         // 公共变量
         const apiBaseUrl = '';
         let wsConnection = null;
+        let printerGeneralLimits = null;
+        let printerGridConfig = null;
         
         // 初始化函数
         async function initialize() {
@@ -1154,8 +1186,10 @@
             // 更新设备状态
             await updateDeviceStatus();
             
-            // 填充网格位置选择框
-            populateGridPositions();
+            // populateGridPositions(); // Removed
+
+            // 获取打印机网格信息
+            await fetchGridInfo();
             
             // 连接WebSocket
             connectWebSocket();
@@ -1232,21 +1266,16 @@
             }
         }
         
-        // 填充网格位置选择框
-        function populateGridPositions() {
-            const select = document.getElementById('gridPosition');
-            
-            // 清空现有选项
-            select.innerHTML = '<option selected disabled>选择网格位置</option>';
-            
-            // 添加1-50的选项
-            for (let i = 1; i <= 50; i++) {
-                const option = document.createElement('option');
-                option.value = i;
-                option.textContent = `位置 ${i}`;
-                select.appendChild(option);
-            }
-        }
+        // function populateGridPositions() { // Removed
+        //     const select = document.getElementById('gridPosition');
+        //     select.innerHTML = '<option selected disabled>选择网格位置</option>';
+        //     for (let i = 1; i <= 50; i++) {
+        //         const option = document.createElement('option');
+        //         option.value = i;
+        //         option.textContent = `位置 ${i}`;
+        //         select.appendChild(option);
+        //     }
+        // }
         
         // 连接WebSocket
         function connectWebSocket() {
@@ -1353,9 +1382,7 @@
                 log("Handling printer_status message: " + JSON.stringify(data), "info");
                 updateStatusIndicator('printerStatus', data.initialized);
                 if (data.position) {
-                    // 可选：更新打印机位置显示，如果HTML中有相应元素
-                    // const posElement = document.getElementById('printerCurrentPosition');
-                    // if(posElement) posElement.textContent = `X: ${data.position.x}, Y: ${data.position.y}, Z: ${data.position.z}`;
+                    updatePositionPointer(data.position.x, data.position.y, data.position.z);
                 }
                 return;
             } else if (data.type === 'chi_status') {
@@ -1431,7 +1458,7 @@
             // 打印机相关
             document.getElementById('initializePrinter').addEventListener('click', initializePrinter);
             document.getElementById('movePrinter').addEventListener('click', movePrinter);
-            document.getElementById('moveToGrid').addEventListener('click', moveToGrid);
+            // document.getElementById('moveToGrid').addEventListener('click', moveToGrid); // Removed
             document.getElementById('homePrinter').addEventListener('click', homePrinter);
             document.getElementById('getPrinterPosition').addEventListener('click', getPrinterPosition);
             
@@ -1447,21 +1474,21 @@
         // 初始化打印机
         async function initializePrinter() {
             try {
-                log("正在初始化打印机...");
+                log("正在初始化位置控制...");
                 
                 const response = await fetch(`${apiBaseUrl}/api/printer/initialize`, {
                     method: 'POST'
                 });
                 
                 const data = await response.json();
-                log(data.message, data.error ? "error" : "success");
+                log(data.message, data.error ? "error" : "success"); // Backend message might still say "打印机"
                 
                 // 更新状态指示器
                 if (!data.error) {
                     updateStatusIndicator('printerStatus', true);
                 }
             } catch (error) {
-                log(`初始化打印机失败: ${error.message}`, "error");
+                log(`初始化位置控制失败: ${error.message}`, "error");
             }
         }
         
@@ -1472,7 +1499,7 @@
                 const y = parseFloat(document.getElementById('printerY').value || 0);
                 const z = parseFloat(document.getElementById('printerZ').value || 0);
                 
-                log(`正在移动打印机到 (${x}, ${y}, ${z})...`);
+                log(`正在移动位置控制器到 (${x}, ${y}, ${z})...`);
                 
                 const response = await fetch(`${apiBaseUrl}/api/printer/move`, {
                     method: 'POST',
@@ -1483,67 +1510,185 @@
                 });
                 
                 const data = await response.json();
-                log(data.message, data.error ? "error" : "success");
+                log(data.message, data.error ? "error" : "success"); // Backend message might still say "打印机"
             } catch (error) {
-                log(`移动打印机失败: ${error.message}`, "error");
+                log(`移动位置控制器失败: ${error.message}`, "error");
             }
         }
         
-        // 移动到网格位置
-        async function moveToGrid() {
-            try {
-                const position = parseInt(document.getElementById('gridPosition').value || 1);
-                
-                log(`正在移动打印机到网格位置 ${position}...`);
-                
-                const response = await fetch(`${apiBaseUrl}/api/printer/grid`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ position })
-                });
-                
-                const data = await response.json();
-                log(data.message, data.error ? "error" : "success");
-            } catch (error) {
-                log(`移动到网格位置失败: ${error.message}`, "error");
-            }
-        }
+        // 移动到网格位置 (Old function, to be removed or commented)
+        // async function moveToGrid() { 
+        //     try {
+        //         const position = parseInt(document.getElementById('gridPosition').value || 1);
+        //         log(`正在移动打印机到网格位置 ${position}...`);
+        //         await callMoveToGridApi(position); // Call the new API function
+        //     } catch (error) {
+        //         log(`移动到网格位置失败: ${error.message}`, "error");
+        //     }
+        // }
         
         // 归位打印机
         async function homePrinter() {
             try {
-                log("正在归位打印机...");
+                log("正在归位位置控制器...");
                 
                 const response = await fetch(`${apiBaseUrl}/api/printer/home`, {
                     method: 'POST'
                 });
                 
                 const data = await response.json();
-                log(data.message, data.error ? "error" : "success");
+                log(data.message, data.error ? "error" : "success"); // Backend message might still say "打印机"
             } catch (error) {
-                log(`归位打印机失败: ${error.message}`, "error");
+                log(`归位位置控制器失败: ${error.message}`, "error");
             }
         }
         
         // 获取打印机位置
         async function getPrinterPosition() {
             try {
-                log("正在获取打印机位置...");
+                log("正在获取当前位置...");
                 
                 const response = await fetch(`${apiBaseUrl}/api/printer/position`);
                 const data = await response.json();
                 
                 if (data.position) {
                     const { x, y, z } = data.position;
-                    log(`打印机当前位置: X=${x?.toFixed(2) || 0}, Y=${y?.toFixed(2) || 0}, Z=${z?.toFixed(2) || 0}`, "success");
+                    log(`当前位置: X=${x?.toFixed(2) || 0}, Y=${y?.toFixed(2) || 0}, Z=${z?.toFixed(2) || 0}`, "success");
+                    updatePositionPointer(x, y, z); // Update visualization
                 } else {
-                    log(data.message, data.error ? "error" : "info");
+                    log(data.message, data.error ? "error" : "info"); // Backend message might still say "打印机"
                 }
             } catch (error) {
-                log(`获取打印机位置失败: ${error.message}`, "error");
+                log(`获取当前位置失败: ${error.message}`, "error");
             }
+        }
+
+        // 获取打印机网格信息
+        async function fetchGridInfo() {
+            try {
+                log("正在获取位置控制网格信息...");
+                const response = await fetch(`${apiBaseUrl}/api/printer/info`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                
+                printerGeneralLimits = data.general_limits;
+                printerGridConfig = data.grid_config;
+                
+                log("位置控制网格信息已获取", "success");
+                displayGrid(printerGridConfig); // Display the grid once config is fetched
+            } catch (error) {
+                log(`获取位置控制网格信息失败: ${error.message}`, "error");
+                // Fallback or error display for grid
+                const gridContainer = document.getElementById('gridVisualizationContainer');
+                if(gridContainer) gridContainer.innerHTML = '<p class="text-danger text-center">无法加载网格信息</p>';
+            }
+        }
+
+        // 显示网格
+        function displayGrid(gridConfig) {
+            const container = document.getElementById('gridVisualizationContainer');
+            if (!container || !gridConfig) {
+                log("无法显示网格：容器或配置缺失", "error");
+                return;
+            }
+            container.innerHTML = ''; // Clear previous grid cells, keep pointer
+            
+            // Keep the pointer element if it's already there, or create it if it's the first time.
+            let pointer = document.getElementById('printerPositionPointer');
+            if (!pointer) {
+                pointer = document.createElement('div');
+                pointer.id = 'printerPositionPointer';
+                // Styles are set in CSS, but ensure it's appended if created dynamically
+                container.appendChild(pointer);
+            }
+
+
+            container.style.gridTemplateRows = `repeat(${gridConfig.rows}, 1fr)`;
+            container.style.gridTemplateColumns = `repeat(${gridConfig.cols}, 1fr)`;
+
+            for (let i = 0; i < gridConfig.grid_mapping.length; i++) {
+                const cellData = gridConfig.grid_mapping[i];
+                const cell = document.createElement('div');
+                cell.classList.add('grid-cell');
+                cell.textContent = cellData.grid_number;
+                cell.dataset.gridNumber = cellData.grid_number; // Store grid_number
+                cell.title = `点击移动到网格 ${cellData.grid_number} (X: ${cellData.center_x}, Y: ${cellData.center_y})`;
+                cell.addEventListener('click', handleGridCellClick); // Add click listener
+                container.appendChild(cell);
+            }
+        }
+
+        // 处理网格单元格点击
+        function handleGridCellClick(event) {
+            const gridNumber = parseInt(event.currentTarget.dataset.gridNumber);
+            if (!isNaN(gridNumber)) {
+                log(`点击了网格单元: ${gridNumber}`);
+                callMoveToGridApi(gridNumber);
+            } else {
+                log("无法从点击的单元格获取网格编号。", "error");
+            }
+        }
+
+        // 调用API移动到网格位置
+        async function callMoveToGridApi(gridNum) {
+            log(`请求移动到网格位置 ${gridNum}...`);
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/printer/grid`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ position: gridNum })
+                });
+                const data = await response.json();
+                log(data.message, data.error ? "error" : "success");
+            } catch (error) {
+                log(`移动到网格位置 ${gridNum} 失败: ${error.message}`, "error");
+            }
+        }
+        
+        // 更新位置指针
+        function updatePositionPointer(currentX, currentY, currentZ) {
+            const pointer = document.getElementById('printerPositionPointer');
+            const xCoordSpan = document.getElementById('currentXCoord');
+            const yCoordSpan = document.getElementById('currentYCoord');
+            const zCoordSpan = document.getElementById('currentZCoord');
+
+            if (!pointer || !printerGridConfig || !printerGridConfig.x_min === undefined) {
+                log("无法更新指针: DOM元素或网格配置未准备好。", "warn");
+                xCoordSpan.textContent = currentX !== undefined ? currentX.toFixed(2) : "N/A";
+                yCoordSpan.textContent = currentY !== undefined ? currentY.toFixed(2) : "N/A";
+                zCoordSpan.textContent = currentZ !== undefined ? currentZ.toFixed(2) : "N/A";
+                return;
+            }
+
+            const { x_min, x_max, y_min, y_max } = printerGridConfig;
+
+            if (currentX !== undefined && currentY !== undefined) {
+                const rangeX = x_max - x_min;
+                const rangeY = y_max - y_min;
+
+                if (rangeX > 0 && rangeY > 0) {
+                    let percentX = ((currentX - x_min) / rangeX) * 100;
+                    let percentY = ((y_max - currentY) / rangeY) * 100; // Y is inverted
+
+                    // Clamp values to be within 0-100% to keep pointer within bounds
+                    percentX = Math.max(0, Math.min(100, percentX));
+                    percentY = Math.max(0, Math.min(100, percentY));
+
+                    pointer.style.left = `${percentX}%`;
+                    pointer.style.top = `${percentY}%`;
+                    pointer.style.display = 'block';
+                } else {
+                    pointer.style.display = 'none'; // Hide if range is invalid
+                }
+            } else {
+                pointer.style.display = 'none'; // Hide if coords are undefined
+            }
+
+            xCoordSpan.textContent = currentX !== undefined ? currentX.toFixed(2) : "N/A";
+            yCoordSpan.textContent = currentY !== undefined ? currentY.toFixed(2) : "N/A";
+            zCoordSpan.textContent = currentZ !== undefined ? currentZ.toFixed(2) : "N/A";
         }
         
         // === 泵功能 ===
