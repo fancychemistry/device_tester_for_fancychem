@@ -53,17 +53,31 @@
         #gridVisualizationContainer {
             display: grid;
             border: 1px solid #ccc;
-            /* width: 100%; /* Default if not overridden by col-md-X */
-            /* height: 300px; /* Example height */
             position: relative; /* For absolute positioning of the pointer */
+            /* Dynamic width/height will be set by JS */
+            justify-content: center; /* Center the grid items if container is wider */
+            align-content: center; /* Center the grid items if container is taller */
         }
         .grid-cell {
             border: 1px solid #eee;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.8em;
+            font-size: 0.7em; /* Slightly smaller font for smaller cells */
             box-sizing: border-box;
+            width: 35px;  /* Fixed width for circular cells */
+            height: 35px; /* Fixed height for circular cells */
+            border-radius: 50%; /* Make cells circular */
+            cursor: pointer; /* Indicate cells are clickable */
+            margin: 1px; /* Add small spacing between cells */
+        }
+        .grid-cell:hover {
+            background-color: #e9ecef; /* Lighter hover effect */
+        }
+        .active-grid-cell {
+            background-color: #28a745 !important; /* Green background for active cell */
+            color: white !important;
+            font-weight: bold;
         }
         #printerPositionPointer {
             position: absolute;
@@ -1605,19 +1619,33 @@
             }
 
 
-            container.style.gridTemplateRows = `repeat(${gridConfig.rows}, 1fr)`;
-            container.style.gridTemplateColumns = `repeat(${gridConfig.cols}, 1fr)`;
+            // Adjust container to fit cells better, assuming fixed cell sizes + margins
+            const cellVisualWidth = 35 + 2; // cell width (35) + horizontal margins (1px on each side = 2px)
+            const cellVisualHeight = 35 + 2; // cell height (35) + vertical margins (1px on each side = 2px)
+            container.style.width = `${gridConfig.cols * cellVisualWidth}px`;
+            container.style.height = `${gridConfig.rows * cellVisualHeight}px`;
+            container.style.margin = '10px auto'; // Add some top/bottom margin and center horizontally
 
-            for (let i = 0; i < gridConfig.grid_mapping.length; i++) {
-                const cellData = gridConfig.grid_mapping[i];
+
+            container.style.gridTemplateColumns = `repeat(${gridConfig.cols}, ${cellVisualWidth}px)`;
+            container.style.gridTemplateRows = `repeat(${gridConfig.rows}, ${cellVisualHeight}px)`;
+
+            gridConfig.grid_mapping.forEach(cellData => {
                 const cell = document.createElement('div');
                 cell.classList.add('grid-cell');
                 cell.textContent = cellData.grid_number;
-                cell.dataset.gridNumber = cellData.grid_number; // Store grid_number
-                cell.title = `点击移动到网格 ${cellData.grid_number} (X: ${cellData.center_x}, Y: ${cellData.center_y})`;
-                cell.addEventListener('click', handleGridCellClick); // Add click listener
+                cell.dataset.gridNumber = cellData.grid_number;
+                
+                // CSS Grid lines are 1-indexed.
+                // Logical row 1 (bottom) maps to CSS grid row `gridConfig.rows` (visually the last row).
+                // Logical col 1 (left) maps to CSS grid col 1.
+                cell.style.gridRowStart = gridConfig.rows - cellData.row + 1; 
+                cell.style.gridColumnStart = cellData.col;
+
+                cell.title = `网格 ${cellData.grid_number} (X: ${cellData.center_x}, Y: ${cellData.center_y})`;
+                cell.addEventListener('click', handleGridCellClick);
                 container.appendChild(cell);
-            }
+            });
         }
 
         // 处理网格单元格点击
@@ -1662,17 +1690,23 @@
                 return;
             }
 
-            const { x_min, x_max, y_min, y_max } = printerGridConfig;
+            const { x_min, x_max, y_min, y_max, rows, cols } = printerGridConfig;
 
+            // Update pointer position
             if (currentX !== undefined && currentY !== undefined) {
                 const rangeX = x_max - x_min;
                 const rangeY = y_max - y_min;
 
                 if (rangeX > 0 && rangeY > 0) {
+                    // percentX: 0% at x_min, 100% at x_max
                     let percentX = ((currentX - x_min) / rangeX) * 100;
-                    let percentY = ((y_max - currentY) / rangeY) * 100; // Y is inverted
+                    // percentY: 0% at y_max (top of grid in CSS), 100% at y_min (bottom of grid in CSS)
+                    // The CSS 'top' property positions from the top edge of the container.
+                    // If currentY is y_max (physical top of grid area), pointer should be at 0% 'top' of container.
+                    // If currentY is y_min (physical bottom of grid area), pointer should be at 100% 'top' of container.
+                    let percentY = ((y_max - currentY) / rangeY) * 100; 
 
-                    // Clamp values to be within 0-100% to keep pointer within bounds
+                    // Clamp values to be within 0-100% to keep pointer within the visual grid container
                     percentX = Math.max(0, Math.min(100, percentX));
                     percentY = Math.max(0, Math.min(100, percentY));
 
@@ -1680,15 +1714,41 @@
                     pointer.style.top = `${percentY}%`;
                     pointer.style.display = 'block';
                 } else {
-                    pointer.style.display = 'none'; // Hide if range is invalid
+                    pointer.style.display = 'none';
                 }
             } else {
-                pointer.style.display = 'none'; // Hide if coords are undefined
+                pointer.style.display = 'none';
             }
 
+            // Update coordinate display
             xCoordSpan.textContent = currentX !== undefined ? currentX.toFixed(2) : "N/A";
             yCoordSpan.textContent = currentY !== undefined ? currentY.toFixed(2) : "N/A";
             zCoordSpan.textContent = currentZ !== undefined ? currentZ.toFixed(2) : "N/A";
+
+            // Active cell highlighting
+            const allCells = document.querySelectorAll('#gridVisualizationContainer .grid-cell');
+            allCells.forEach(cell => cell.classList.remove('active-grid-cell'));
+
+            if (currentX !== undefined && currentY !== undefined && printerGridConfig.grid_mapping) {
+                const cell_width_coords = (x_max - x_min) / cols;
+                const cell_height_coords = (y_max - y_min) / rows;
+
+                for (const cellData of printerGridConfig.grid_mapping) {
+                    const cell_x_min = cellData.center_x - cell_width_coords / 2;
+                    const cell_x_max = cellData.center_x + cell_width_coords / 2;
+                    const cell_y_min = cellData.center_y - cell_height_coords / 2;
+                    const cell_y_max = cellData.center_y + cell_height_coords / 2;
+
+                    if (currentX >= cell_x_min && currentX <= cell_x_max &&
+                        currentY >= cell_y_min && currentY <= cell_y_max) {
+                        const activeCellElement = document.querySelector(`#gridVisualizationContainer .grid-cell[data-grid-number="${cellData.grid_number}"]`);
+                        if (activeCellElement) {
+                            activeCellElement.classList.add('active-grid-cell');
+                        }
+                        break; 
+                    }
+                }
+            }
         }
         
         // === 泵功能 ===

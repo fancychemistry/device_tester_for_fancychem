@@ -453,8 +453,14 @@ async def get_printer_info():
         row_calc = (grid_number_abs - 1) // grid_cols + 1
         col_calc = (grid_number_abs - 1) % grid_cols + 1
 
-        center_x_calc = grid_area_x_max - (col_calc - 1) * (grid_area_x_max - grid_area_x_min) / (grid_cols - 1 if grid_cols > 1 else 1)
-        center_y_calc = grid_area_y_max - (row_calc - 1) * (grid_area_y_max - grid_area_y_min) / (grid_rows - 1 if grid_rows > 1 else 1)
+        # Denominators for grid calculation
+        x_denominator = grid_cols - 1 if grid_cols > 1 else 1
+        y_denominator = grid_rows - 1 if grid_rows > 1 else 1
+
+        # New calculation: X increases from left (x_min) to right (x_max)
+        center_x_calc = grid_area_x_min + (col_calc - 1) * (grid_area_x_max - grid_area_x_min) / x_denominator
+        # New calculation: Y increases from bottom (y_min) to top (y_max)
+        center_y_calc = grid_area_y_min + (row_calc - 1) * (grid_area_y_max - grid_area_y_min) / y_denominator
         
         grid_mapping_list.append(
             GridCell(

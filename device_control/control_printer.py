@@ -246,26 +246,33 @@ class PrinterControl:
             print("错误：网格编号必须在1到50之间！")
             return False
 
-        # 计算行和列
-        row = (grid_number - 1) // 10 + 1  # 1-5
-        col = (grid_number - 1) % 10 + 1  # 1-10
+        # 新的网格定义: 5行10列，左下角为1号，右下角为10号，左上角为41号，右上角为50号
+        num_rows = 5
+        num_cols = 10
 
-        # 计算坐标 - 新的网格定义
-        # 右上角(1号位置): (174,173,75)
-        # 左上角(10号位置): (6,173,75)
-        # 右下角(41号位置): (174,100,75)
-        # 左下角(50号位置): (6,100,75)
-        x_min, x_max = 6, 174
-        y_min, y_max = 100, 173
-        z_height = 75
+        # row: 1 is bottom, num_rows is top
+        row = (grid_number - 1) // num_cols + 1
+        # col: 1 is left, num_cols is right
+        col = (grid_number - 1) % num_cols + 1
 
-        # 网格从右到左，从上到下排列
-        col_offset = col - 1  # 列偏移(0-9)
-        x = x_max - col_offset * (x_max - x_min) / 9  # 从右到左
-        y = y_max - (row - 1) * (y_max - y_min) / 4  # 从上到下
+        # 使用self.grid_min_pos 和 self.grid_max_pos 定义的网格边界
+        x_min_grid = self.grid_min_pos[0]  # e.g., 6
+        x_max_grid = self.grid_max_pos[0]  # e.g., 174
+        y_min_grid = self.grid_min_pos[1]  # e.g., 100
+        y_max_grid = self.grid_max_pos[1]  # e.g., 173
+        z_height = self.grid_min_pos[2]    # e.g., 75 (Z高度通常在网格中是固定的)
+
+        # 处理单行或单列的特殊情况，尽管对于10x5网格不是必须的
+        x_denominator = num_cols - 1 if num_cols > 1 else 1
+        y_denominator = num_rows - 1 if num_rows > 1 else 1
+        
+        # 计算目标X坐标 (从左到右)
+        target_x = x_min_grid + (col - 1) * (x_max_grid - x_min_grid) / x_denominator
+        # 计算目标Y坐标 (从下到上)
+        target_y = y_min_grid + (row - 1) * (y_max_grid - y_min_grid) / y_denominator
 
         # 显示计算出的坐标
-        print(f"网格位置 {grid_number} 的计算坐标: ({x:.2f}, {y:.2f}, {z_height:.2f})")
+        print(f"网格位置 {grid_number} (Row: {row}, Col: {col}) 的计算坐标: ({target_x:.2f}, {target_y:.2f}, {z_height:.2f})")
 
         # 开始安全移动过程
         current_pos = self.get_current_position()
@@ -273,23 +280,36 @@ class PrinterControl:
             print("无法获取当前位置，移动取消")
             return False
 
-        # 1. 首先Z轴上升到固定安全高度（85mm），而不是累加高度
-        safe_z = 85  # 固定安全高度
-        print(f"第1步：Z轴上升到安全高度 {safe_z:.2f}")
-        if not self.move_to(current_pos[0], current_pos[1], safe_z, use_general_safety=True):
-            return False
+        # 1. 首先Z轴上升到固定安全高度（例如85mm，或者一个基于当前Z和目标Z的更高值）
+        # 使用一个高于当前和目标Z的固定安全高度，或者 general_max_pos[2] 的一个比例
+        # 为了简单起见，使用一个固定的抬升高度，例如10mm高于当前最高点（grid_max_pos[2] 或 z_height）
+        # 或者使用一个绝对安全高度，如之前逻辑中的85mm，但需确保其高于所有操作点
+        # 我们这里使用一个绝对安全高度，假设为 general_max_pos[2] - 10，如果它高于 z_height
+        safe_z_lift = max(z_height + 10, self.general_max_pos[2] - 10) # 确保至少抬高10mm，但不超过设定的通用最大Z太多
+        safe_z_lift = min(safe_z_lift, self.general_max_pos[2]) # 不超过通用Z最大值
+        
+        # 如果当前Z已经高于或等于抬升高度，则不需要第一步抬升
+        if current_pos[2] < safe_z_lift:
+            print(f"第1步：Z轴上升到安全高度 {safe_z_lift:.2f}")
+            if not self.move_to(current_pos[0], current_pos[1], safe_z_lift, use_general_safety=True): # 使用 general_safety 以允许Z轴到较高位置
+                return False
+        else:
+            print(f"第1步：当前Z ({current_pos[2]:.2f}) 已在安全高度 {safe_z_lift:.2f} 之上，跳过Z轴抬升。")
+
 
         # 2. 移动到目标XY位置，保持Z轴在安全高度
-        print(f"第2步：在安全高度移动到目标XY位置 ({x:.2f}, {y:.2f}, {safe_z:.2f})")
-        if not self.move_to(x, y, safe_z, use_general_safety=True):
+        print(f"第2步：在安全高度 ({current_pos[2] if current_pos[2] >= safe_z_lift else safe_z_lift:.2f}) 移动到目标XY位置 ({target_x:.2f}, {target_y:.2f})")
+        # 如果第一步中没有抬升，则使用当前的Z，否则使用safe_z_lift
+        z_for_xy_move = current_pos[2] if current_pos[2] >= safe_z_lift else safe_z_lift
+        if not self.move_to(target_x, target_y, z_for_xy_move, use_general_safety=True): # XY移动时也用general_safety，因为Z可能较高
             return False
 
         # 3. 最后降低Z轴到目标高度
         print(f"第3步：Z轴下降到目标高度 {z_height:.2f}")
-        if not self.move_to(x, y, z_height, use_general_safety=False):
+        if not self.move_to(target_x, target_y, z_height, use_general_safety=False): # Z下降时使用网格安全范围
             return False
 
-        print(f"成功移动到网格位置 {grid_number}: ({x:.2f}, {y:.2f}, {z_height:.2f})")
+        print(f"成功移动到网格位置 {grid_number}: ({target_x:.2f}, {target_y:.2f}, {z_height:.2f})")
         return True
 
     def home(self, wait_time=10):
